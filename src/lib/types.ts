@@ -55,6 +55,7 @@ export interface GameState {
 export interface GameUpdate {
   type:
     | "connected"
+    | "game_updated"
     | "player_joined"
     | "player_left"
     | "game_started"

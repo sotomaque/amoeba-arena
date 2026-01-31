@@ -1,6 +1,6 @@
+import { createClient } from "@/utils/supabase/server";
 import type { GameState, Player, GameUpdate } from "./types";
 import {
-  createInitialGameState,
   generateGameCode,
   processRound,
   INITIAL_POPULATION,
@@ -8,286 +8,405 @@ import {
 } from "./gameLogic";
 import { getShuffledScenarioIds, getScenarioById } from "./scenarios";
 
-// In-memory storage for all games
-const games = new Map<string, GameState>();
-const playerChoices = new Map<string, Map<string, "safe" | "risky">>();
+// Helper to convert DB rows to GameState
+function rowsToGameState(gameRow: any, playerRows: any[]): GameState {
+  const players: Player[] = playerRows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    population: p.population,
+    isHost: p.is_host,
+    hasChosen: p.has_chosen,
+    isEliminated: p.is_eliminated,
+  }));
 
-// WebSocket subscribers for each game
-type UpdateCallback = (update: GameUpdate) => void;
-const subscribers = new Map<string, Set<UpdateCallback>>();
+  const scenarioOrder = gameRow.scenario_order || [];
+  const currentScenario = gameRow.current_scenario_id
+    ? getScenarioById(gameRow.current_scenario_id)
+    : null;
 
-export function subscribeToGame(
-  code: string,
-  callback: UpdateCallback
-): () => void {
-  if (!subscribers.has(code)) {
-    subscribers.set(code, new Set());
-  }
-  subscribers.get(code)!.add(callback);
-
-  return () => {
-    subscribers.get(code)?.delete(callback);
+  return {
+    code: gameRow.code,
+    hostId: playerRows.find((p) => p.is_host)?.id || "",
+    phase: gameRow.phase as GameState["phase"],
+    players,
+    currentRound: gameRow.current_round,
+    totalRounds: gameRow.total_rounds,
+    currentScenario: currentScenario || null,
+    scenarioOrder,
+    roundStartTime: gameRow.round_start_time
+      ? new Date(gameRow.round_start_time).getTime()
+      : null,
+    roundDuration: ROUND_DURATION,
+    roundResults: gameRow.round_results || [],
+    pausedTimeRemaining: gameRow.paused_time_remaining,
   };
 }
 
-function broadcastUpdate(code: string, update: GameUpdate) {
-  const subs = subscribers.get(code);
-  if (subs) {
-    subs.forEach((callback) => callback(update));
-  }
-}
-
-export function createGame(
+export async function createGame(
   hostName: string,
   totalRounds: number = 10
-): { code: string; hostId: string } {
+): Promise<{ code: string; hostId: string }> {
+  const supabase = await createClient();
   let code = generateGameCode();
+
   // Ensure unique code
-  while (games.has(code)) {
+  let existing = await supabase.from("games").select("code").eq("code", code).single();
+  while (existing.data) {
     code = generateGameCode();
+    existing = await supabase.from("games").select("code").eq("code", code).single();
   }
 
   const hostId = `host_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const gameState = createInitialGameState(code, hostId, hostName, totalRounds);
-  games.set(code, gameState);
-  playerChoices.set(code, new Map());
+
+  // Create game
+  const { error: gameError } = await supabase.from("games").insert({
+    code,
+    phase: "lobby",
+    current_round: 0,
+    total_rounds: totalRounds,
+    current_scenario_id: null,
+    round_start_time: null,
+    paused_time_remaining: null,
+    scenario_order: [],
+    round_results: [],
+  });
+
+  if (gameError) throw gameError;
+
+  // Create host player
+  const { error: playerError } = await supabase.from("players").insert({
+    id: hostId,
+    game_code: code,
+    name: hostName,
+    population: INITIAL_POPULATION,
+    is_host: true,
+    has_chosen: false,
+    current_choice: null,
+    is_eliminated: false,
+  });
+
+  if (playerError) throw playerError;
 
   return { code, hostId };
 }
 
-export function getGame(code: string): GameState | null {
-  return games.get(code) || null;
+export async function getGame(code: string): Promise<GameState | null> {
+  const supabase = await createClient();
+
+  const { data: gameRow, error: gameError } = await supabase
+    .from("games")
+    .select("*")
+    .eq("code", code)
+    .single();
+
+  if (gameError || !gameRow) return null;
+
+  const { data: playerRows, error: playerError } = await supabase
+    .from("players")
+    .select("*")
+    .eq("game_code", code)
+    .order("created_at", { ascending: true });
+
+  if (playerError) return null;
+
+  return rowsToGameState(gameRow, playerRows || []);
 }
 
-export function joinGame(
+export async function joinGame(
   code: string,
   playerName: string
-): { playerId: string; gameState: GameState } | null {
-  const game = games.get(code);
-  if (!game || game.phase !== "lobby") {
-    return null;
-  }
+): Promise<{ playerId: string; gameState: GameState } | null> {
+  const supabase = await createClient();
+
+  const { data: gameRow } = await supabase
+    .from("games")
+    .select("*")
+    .eq("code", code)
+    .single();
+
+  if (!gameRow || gameRow.phase !== "lobby") return null;
 
   // Check for duplicate names
-  if (game.players.some((p) => p.name.toLowerCase() === playerName.toLowerCase())) {
+  const { data: existingPlayers } = await supabase
+    .from("players")
+    .select("name")
+    .eq("game_code", code);
+
+  if (
+    existingPlayers?.some(
+      (p) => p.name.toLowerCase() === playerName.toLowerCase()
+    )
+  ) {
     return null;
   }
 
   const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const newPlayer: Player = {
+
+  const { error } = await supabase.from("players").insert({
     id: playerId,
+    game_code: code,
     name: playerName,
     population: INITIAL_POPULATION,
-    isHost: false,
-    hasChosen: false,
-    isEliminated: false,
-  };
-
-  game.players.push(newPlayer);
-
-  broadcastUpdate(code, {
-    type: "player_joined",
-    gameState: game,
-    message: `${playerName} joined the game`,
+    is_host: false,
+    has_chosen: false,
+    current_choice: null,
+    is_eliminated: false,
   });
 
-  return { playerId, gameState: game };
+  if (error) return null;
+
+  const gameState = await getGame(code);
+  return gameState ? { playerId, gameState } : null;
 }
 
-export function removePlayer(code: string, playerId: string): boolean {
-  const game = games.get(code);
-  if (!game) return false;
+export async function removePlayer(
+  code: string,
+  playerId: string
+): Promise<boolean> {
+  const supabase = await createClient();
 
-  const playerIndex = game.players.findIndex((p) => p.id === playerId);
-  if (playerIndex === -1) return false;
+  const { error } = await supabase
+    .from("players")
+    .delete()
+    .eq("id", playerId)
+    .eq("game_code", code);
 
-  const player = game.players[playerIndex];
-  game.players.splice(playerIndex, 1);
-
-  broadcastUpdate(code, {
-    type: "player_left",
-    gameState: game,
-    message: `${player.name} left the game`,
-  });
-
-  return true;
+  return !error;
 }
 
-export function startGame(code: string, hostId: string): GameState | null {
-  const game = games.get(code);
-  if (!game || game.hostId !== hostId || game.phase !== "lobby") {
+export async function startGame(
+  code: string,
+  hostId: string
+): Promise<GameState | null> {
+  const supabase = await createClient();
+  const gameState = await getGame(code);
+
+  if (!gameState || gameState.hostId !== hostId || gameState.phase !== "lobby") {
     return null;
   }
 
-  // Need at least 1 player besides host to start
-  const playerCount = game.players.filter((p) => !p.isHost).length;
-  if (playerCount < 1) {
+  const playerCount = gameState.players.filter((p) => !p.isHost).length;
+  if (playerCount < 1) return null;
+
+  const scenarioOrder = getShuffledScenarioIds().slice(0, gameState.totalRounds);
+  const firstScenarioId = scenarioOrder[0];
+
+  const { error } = await supabase
+    .from("games")
+    .update({
+      phase: "playing",
+      current_round: 1,
+      scenario_order: scenarioOrder,
+      current_scenario_id: firstScenarioId,
+      round_start_time: new Date().toISOString(),
+      paused_time_remaining: null,
+    })
+    .eq("code", code);
+
+  if (error) return null;
+
+  return await getGame(code);
+}
+
+export async function pauseRound(
+  code: string,
+  hostId: string
+): Promise<GameState | null> {
+  const supabase = await createClient();
+  const gameState = await getGame(code);
+
+  if (!gameState || gameState.hostId !== hostId || gameState.phase !== "playing") {
     return null;
   }
 
-  game.phase = "playing";
-  game.currentRound = 1;
-  game.scenarioOrder = getShuffledScenarioIds().slice(0, game.totalRounds);
-  game.currentScenario = getScenarioById(game.scenarioOrder[0]) || null;
-  game.roundStartTime = Date.now();
-  game.pausedTimeRemaining = null;
+  const elapsed = Math.floor((Date.now() - gameState.roundStartTime!) / 1000);
+  const remaining = Math.max(0, gameState.roundDuration - elapsed);
 
-  broadcastUpdate(code, {
-    type: "game_started",
-    gameState: game,
-    message: "Game started!",
-  });
+  const { error } = await supabase
+    .from("games")
+    .update({
+      phase: "paused",
+      paused_time_remaining: remaining,
+      round_start_time: null,
+    })
+    .eq("code", code);
 
-  return game;
+  if (error) return null;
+
+  return await getGame(code);
 }
 
-export function pauseRound(code: string, hostId: string): GameState | null {
-  const game = games.get(code);
-  if (!game || game.hostId !== hostId || game.phase !== "playing") {
+export async function resumeRound(
+  code: string,
+  hostId: string
+): Promise<GameState | null> {
+  const supabase = await createClient();
+  const gameState = await getGame(code);
+
+  if (!gameState || gameState.hostId !== hostId || gameState.phase !== "paused") {
     return null;
   }
 
-  // Calculate remaining time
-  const elapsed = Math.floor((Date.now() - game.roundStartTime!) / 1000);
-  const remaining = Math.max(0, game.roundDuration - elapsed);
+  const remaining = gameState.pausedTimeRemaining || ROUND_DURATION;
+  const newStartTime = new Date(
+    Date.now() - (gameState.roundDuration - remaining) * 1000
+  );
 
-  game.phase = "paused";
-  game.pausedTimeRemaining = remaining;
-  game.roundStartTime = null;
+  const { error } = await supabase
+    .from("games")
+    .update({
+      phase: "playing",
+      round_start_time: newStartTime.toISOString(),
+      paused_time_remaining: null,
+    })
+    .eq("code", code);
 
-  broadcastUpdate(code, {
-    type: "round_paused",
-    gameState: game,
-    message: "Round paused",
-  });
+  if (error) return null;
 
-  return game;
+  return await getGame(code);
 }
 
-export function resumeRound(code: string, hostId: string): GameState | null {
-  const game = games.get(code);
-  if (!game || game.hostId !== hostId || game.phase !== "paused") {
-    return null;
-  }
-
-  // Calculate new start time based on remaining time
-  const remaining = game.pausedTimeRemaining || ROUND_DURATION;
-  game.roundStartTime = Date.now() - (game.roundDuration - remaining) * 1000;
-  game.pausedTimeRemaining = null;
-  game.phase = "playing";
-
-  broadcastUpdate(code, {
-    type: "round_resumed",
-    gameState: game,
-    message: "Round resumed",
-  });
-
-  return game;
-}
-
-export function makeChoice(
+export async function makeChoice(
   code: string,
   playerId: string,
   choice: "safe" | "risky"
-): GameState | null {
-  const game = games.get(code);
-  // Allow choices during playing or paused phases
-  if (!game || (game.phase !== "playing" && game.phase !== "paused")) {
+): Promise<GameState | null> {
+  const supabase = await createClient();
+  const gameState = await getGame(code);
+
+  if (!gameState || (gameState.phase !== "playing" && gameState.phase !== "paused")) {
     return null;
   }
 
-  const player = game.players.find((p) => p.id === playerId);
+  const player = gameState.players.find((p) => p.id === playerId);
   if (!player || player.isEliminated || player.hasChosen) {
     return null;
   }
 
-  // Store the choice
-  const choices = playerChoices.get(code)!;
-  choices.set(playerId, choice);
-  player.hasChosen = true;
+  const { error } = await supabase
+    .from("players")
+    .update({
+      has_chosen: true,
+      current_choice: choice,
+    })
+    .eq("id", playerId);
 
-  broadcastUpdate(code, {
-    type: "player_chose",
-    gameState: game,
-  });
+  if (error) return null;
 
-  return game;
+  return await getGame(code);
 }
 
-export function endRound(code: string, hostId: string): GameState | null {
-  const game = games.get(code);
-  // Allow ending round from playing or paused
-  if (!game || game.hostId !== hostId || (game.phase !== "playing" && game.phase !== "paused")) {
+export async function endRound(
+  code: string,
+  hostId: string
+): Promise<GameState | null> {
+  const supabase = await createClient();
+  const gameState = await getGame(code);
+
+  if (
+    !gameState ||
+    gameState.hostId !== hostId ||
+    (gameState.phase !== "playing" && gameState.phase !== "paused")
+  ) {
     return null;
   }
 
-  const choices = playerChoices.get(code)!;
+  // Get player choices
+  const { data: playerRows } = await supabase
+    .from("players")
+    .select("*")
+    .eq("game_code", code);
+
+  if (!playerRows) return null;
+
+  // Build choices map
+  const choices = new Map<string, "safe" | "risky">();
+  playerRows.forEach((p) => {
+    if (p.current_choice) {
+      choices.set(p.id, p.current_choice as "safe" | "risky");
+    }
+  });
 
   // Process the round
   const { updatedPlayers, roundResult } = processRound(
-    game.players,
-    game.currentScenario!,
-    game.currentRound,
+    gameState.players,
+    gameState.currentScenario!,
+    gameState.currentRound,
     choices
   );
 
-  game.players = updatedPlayers;
-  game.roundResults.push(roundResult);
-  game.phase = "results";
-  game.pausedTimeRemaining = null;
+  // Update game state
+  const newRoundResults = [...gameState.roundResults, roundResult];
+  const { error: gameError } = await supabase
+    .from("games")
+    .update({
+      phase: "results",
+      paused_time_remaining: null,
+      round_results: newRoundResults,
+    })
+    .eq("code", code);
 
-  // Clear choices for next round
-  choices.clear();
-  game.players.forEach((p) => (p.hasChosen = false));
+  if (gameError) return null;
 
-  broadcastUpdate(code, {
-    type: "round_ended",
-    gameState: game,
-  });
+  // Update all players
+  for (const player of updatedPlayers) {
+    await supabase
+      .from("players")
+      .update({
+        population: player.population,
+        is_eliminated: player.isEliminated,
+        has_chosen: false,
+        current_choice: null,
+      })
+      .eq("id", player.id);
+  }
 
-  return game;
+  return await getGame(code);
 }
 
-export function nextRound(code: string, hostId: string): GameState | null {
-  const game = games.get(code);
-  if (!game || game.hostId !== hostId || game.phase !== "results") {
+export async function nextRound(
+  code: string,
+  hostId: string
+): Promise<GameState | null> {
+  const supabase = await createClient();
+  const gameState = await getGame(code);
+
+  if (!gameState || gameState.hostId !== hostId || gameState.phase !== "results") {
     return null;
   }
 
-  if (game.currentRound >= game.totalRounds) {
+  if (gameState.currentRound >= gameState.totalRounds) {
     // Game is finished
-    game.phase = "finished";
-    broadcastUpdate(code, {
-      type: "game_ended",
-      gameState: game,
-      message: "Game over!",
-    });
-    return game;
+    const { error } = await supabase
+      .from("games")
+      .update({ phase: "finished" })
+      .eq("code", code);
+
+    if (error) return null;
+    return await getGame(code);
   }
 
   // Advance to next round
-  game.currentRound++;
-  game.currentScenario =
-    getScenarioById(game.scenarioOrder[game.currentRound - 1]) || null;
-  game.roundStartTime = Date.now();
-  game.pausedTimeRemaining = null;
-  game.phase = "playing";
+  const nextRoundNum = gameState.currentRound + 1;
+  const nextScenarioId = gameState.scenarioOrder[nextRoundNum - 1];
 
-  broadcastUpdate(code, {
-    type: "round_started",
-    gameState: game,
-  });
+  const { error } = await supabase
+    .from("games")
+    .update({
+      phase: "playing",
+      current_round: nextRoundNum,
+      current_scenario_id: nextScenarioId,
+      round_start_time: new Date().toISOString(),
+      paused_time_remaining: null,
+    })
+    .eq("code", code);
 
-  return game;
+  if (error) return null;
+
+  return await getGame(code);
 }
 
-export function deleteGame(code: string): void {
-  games.delete(code);
-  playerChoices.delete(code);
-  subscribers.delete(code);
-}
-
-// For debugging
-export function getAllGames(): string[] {
-  return Array.from(games.keys());
+export async function deleteGame(code: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase.from("games").delete().eq("code", code);
 }

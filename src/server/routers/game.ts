@@ -21,8 +21,8 @@ export const gameRouter = router({
         totalRounds: z.number().min(3).max(15).default(10),
       })
     )
-    .mutation(({ input }) => {
-      const result = createGame(input.hostName, input.totalRounds);
+    .mutation(async ({ input }) => {
+      const result = await createGame(input.hostName, input.totalRounds);
       return result;
     }),
 
@@ -33,8 +33,8 @@ export const gameRouter = router({
         playerName: z.string().min(1).max(20),
       })
     )
-    .mutation(({ input }) => {
-      const result = joinGame(input.code.toUpperCase(), input.playerName);
+    .mutation(async ({ input }) => {
+      const result = await joinGame(input.code.toUpperCase(), input.playerName);
       if (!result) {
         throw new Error("Could not join game. Check the code and try again.");
       }
@@ -43,8 +43,8 @@ export const gameRouter = router({
 
   getState: publicProcedure
     .input(z.object({ code: z.string() }))
-    .query(({ input }) => {
-      const game = getGame(input.code.toUpperCase());
+    .query(async ({ input }) => {
+      const game = await getGame(input.code.toUpperCase());
       if (!game) {
         throw new Error("Game not found");
       }
@@ -53,8 +53,8 @@ export const gameRouter = router({
 
   start: publicProcedure
     .input(z.object({ code: z.string(), hostId: z.string() }))
-    .mutation(({ input }) => {
-      const game = startGame(input.code.toUpperCase(), input.hostId);
+    .mutation(async ({ input }) => {
+      const game = await startGame(input.code.toUpperCase(), input.hostId);
       if (!game) {
         throw new Error("Could not start game");
       }
@@ -63,8 +63,8 @@ export const gameRouter = router({
 
   pause: publicProcedure
     .input(z.object({ code: z.string(), hostId: z.string() }))
-    .mutation(({ input }) => {
-      const game = pauseRound(input.code.toUpperCase(), input.hostId);
+    .mutation(async ({ input }) => {
+      const game = await pauseRound(input.code.toUpperCase(), input.hostId);
       if (!game) {
         throw new Error("Could not pause round");
       }
@@ -73,8 +73,8 @@ export const gameRouter = router({
 
   resume: publicProcedure
     .input(z.object({ code: z.string(), hostId: z.string() }))
-    .mutation(({ input }) => {
-      const game = resumeRound(input.code.toUpperCase(), input.hostId);
+    .mutation(async ({ input }) => {
+      const game = await resumeRound(input.code.toUpperCase(), input.hostId);
       if (!game) {
         throw new Error("Could not resume round");
       }
@@ -89,8 +89,8 @@ export const gameRouter = router({
         choice: z.enum(["safe", "risky"]),
       })
     )
-    .mutation(({ input }) => {
-      const game = makeChoice(
+    .mutation(async ({ input }) => {
+      const game = await makeChoice(
         input.code.toUpperCase(),
         input.playerId,
         input.choice
@@ -103,8 +103,8 @@ export const gameRouter = router({
 
   endRound: publicProcedure
     .input(z.object({ code: z.string(), hostId: z.string() }))
-    .mutation(({ input }) => {
-      const game = endRound(input.code.toUpperCase(), input.hostId);
+    .mutation(async ({ input }) => {
+      const game = await endRound(input.code.toUpperCase(), input.hostId);
       if (!game) {
         throw new Error("Could not end round");
       }
@@ -113,8 +113,8 @@ export const gameRouter = router({
 
   nextRound: publicProcedure
     .input(z.object({ code: z.string(), hostId: z.string() }))
-    .mutation(({ input }) => {
-      const game = nextRound(input.code.toUpperCase(), input.hostId);
+    .mutation(async ({ input }) => {
+      const game = await nextRound(input.code.toUpperCase(), input.hostId);
       if (!game) {
         throw new Error("Could not advance to next round");
       }
@@ -123,8 +123,8 @@ export const gameRouter = router({
 
   leave: publicProcedure
     .input(z.object({ code: z.string(), playerId: z.string() }))
-    .mutation(({ input }) => {
-      const success = removePlayer(input.code.toUpperCase(), input.playerId);
+    .mutation(async ({ input }) => {
+      const success = await removePlayer(input.code.toUpperCase(), input.playerId);
       return { success };
     }),
 });

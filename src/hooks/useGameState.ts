@@ -1,68 +1,121 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import type { GameState, GameUpdate } from "@/lib/types";
+import { createClient } from "@/utils/supabase/client";
+import type { GameState } from "@/lib/types";
+import { getScenarioById } from "@/lib/scenarios";
+import { ROUND_DURATION } from "@/lib/gameLogic";
 
 export function useGameState(code: string, initialState?: GameState) {
   const [gameState, setGameState] = useState<GameState | null>(
     initialState || null
   );
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const supabaseRef = useRef(createClient());
 
-  const connect = useCallback(() => {
+  const fetchGameState = useCallback(async () => {
     if (!code) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // WebSocket server runs on port + 1 (e.g., 3001 if Next.js is on 3000)
-    const wsPort = parseInt(window.location.port || "3000", 10) + 1;
-    const ws = new WebSocket(`${protocol}//${window.location.hostname}:${wsPort}/ws?code=${code}`);
+    const supabase = supabaseRef.current;
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-    };
+    try {
+      // Fetch game
+      const { data: gameRow } = await supabase
+        .from("games")
+        .select("*")
+        .eq("code", code)
+        .single();
 
-    ws.onmessage = (event) => {
-      try {
-        const update: GameUpdate = JSON.parse(event.data);
-        setGameState(update.gameState);
-      } catch (e) {
-        console.error("Failed to parse WebSocket message:", e);
-      }
-    };
+      if (!gameRow) return;
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      // Attempt to reconnect after 2 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
-      }, 2000);
-    };
+      // Fetch players
+      const { data: playerRows } = await supabase
+        .from("players")
+        .select("*")
+        .eq("game_code", code)
+        .order("created_at", { ascending: true });
 
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
+      if (!playerRows) return;
 
-    wsRef.current = ws;
+      const players = playerRows.map((p) => ({
+        id: p.id,
+        name: p.name,
+        population: p.population,
+        isHost: p.is_host,
+        hasChosen: p.has_chosen,
+        isEliminated: p.is_eliminated,
+      }));
+
+      const currentScenario = gameRow.current_scenario_id
+        ? getScenarioById(gameRow.current_scenario_id)
+        : null;
+
+      const newState: GameState = {
+        code: gameRow.code,
+        hostId: playerRows.find((p) => p.is_host)?.id || "",
+        phase: gameRow.phase as GameState["phase"],
+        players,
+        currentRound: gameRow.current_round,
+        totalRounds: gameRow.total_rounds,
+        currentScenario: currentScenario || null,
+        scenarioOrder: gameRow.scenario_order || [],
+        roundStartTime: gameRow.round_start_time
+          ? new Date(gameRow.round_start_time).getTime()
+          : null,
+        roundDuration: ROUND_DURATION,
+        roundResults: gameRow.round_results || [],
+        pausedTimeRemaining: gameRow.paused_time_remaining,
+      };
+
+      setGameState(newState);
+    } catch (e) {
+      console.error("Failed to fetch game state:", e);
+    }
   }, [code]);
 
   useEffect(() => {
-    connect();
+    if (!code) return;
+
+    const supabase = supabaseRef.current;
+
+    // Initial fetch
+    fetchGameState();
+
+    // Subscribe to game changes
+    const channel = supabase
+      .channel(`game-realtime:${code}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "games",
+          filter: `code=eq.${code}`,
+        },
+        () => {
+          fetchGameState();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "players",
+          filter: `game_code=eq.${code}`,
+        },
+        () => {
+          fetchGameState();
+        }
+      )
+      .subscribe((status) => {
+        setIsConnected(status === "SUBSCRIBED");
+      });
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      supabase.removeChannel(channel);
     };
-  }, [connect]);
+  }, [code, fetchGameState]);
 
   return { gameState, isConnected, setGameState };
 }

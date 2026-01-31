@@ -3,10 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bun run server.ts",
-    "dev:next": "next dev --turbopack",
+    "dev": "next dev --turbopack",
     "build": "next build",
-    "start": "NODE_ENV=production bun run server.ts",
+    "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "test": "bun test",
@@ -15,6 +14,8 @@
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.93.3",
     "@tanstack/react-query": "^5.90.20",
     "@trpc/client": "^11.9.0",
     "@trpc/react-query": "^11.9.0",
