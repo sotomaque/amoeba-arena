@@ -19,23 +19,16 @@ export function useGameState(code: string, initialState?: GameState) {
     const supabase = supabaseRef.current;
 
     try {
-      // Fetch game
-      const { data: gameRow } = await supabase
-        .from("games")
-        .select("*")
-        .eq("code", code)
-        .single();
+      // Parallelize game and player fetches - they're independent
+      const [gameResult, playersResult] = await Promise.all([
+        supabase.from("games").select("*").eq("code", code).single(),
+        supabase.from("players").select("*").eq("game_code", code).order("created_at", { ascending: true }),
+      ]);
 
-      if (!gameRow) return;
+      const gameRow = gameResult.data;
+      const playerRows = playersResult.data;
 
-      // Fetch players
-      const { data: playerRows } = await supabase
-        .from("players")
-        .select("*")
-        .eq("game_code", code)
-        .order("created_at", { ascending: true });
-
-      if (!playerRows) return;
+      if (!gameRow || !playerRows) return;
 
       const players = playerRows.map((p) => ({
         id: p.id,

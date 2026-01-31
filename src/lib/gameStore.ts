@@ -93,23 +93,16 @@ export async function createGame(
 export async function getGame(code: string): Promise<GameState | null> {
   const supabase = await createClient();
 
-  const { data: gameRow, error: gameError } = await supabase
-    .from("games")
-    .select("*")
-    .eq("code", code)
-    .single();
+  // Parallelize game and player fetches - they're independent
+  const [gameResult, playersResult] = await Promise.all([
+    supabase.from("games").select("*").eq("code", code).single(),
+    supabase.from("players").select("*").eq("game_code", code).order("created_at", { ascending: true }),
+  ]);
 
-  if (gameError || !gameRow) return null;
+  if (gameResult.error || !gameResult.data) return null;
+  if (playersResult.error) return null;
 
-  const { data: playerRows, error: playerError } = await supabase
-    .from("players")
-    .select("*")
-    .eq("game_code", code)
-    .order("created_at", { ascending: true });
-
-  if (playerError) return null;
-
-  return rowsToGameState(gameRow, playerRows || []);
+  return rowsToGameState(gameResult.data, playersResult.data || []);
 }
 
 export async function joinGame(
@@ -118,20 +111,17 @@ export async function joinGame(
 ): Promise<{ playerId: string; gameState: GameState } | null> {
   const supabase = await createClient();
 
-  const { data: gameRow } = await supabase
-    .from("games")
-    .select("*")
-    .eq("code", code)
-    .single();
+  // Parallelize game and existing players fetch
+  const [gameResult, playersResult] = await Promise.all([
+    supabase.from("games").select("*").eq("code", code).single(),
+    supabase.from("players").select("name").eq("game_code", code),
+  ]);
 
+  const gameRow = gameResult.data;
   if (!gameRow || gameRow.phase !== "lobby") return null;
 
   // Check for duplicate names
-  const { data: existingPlayers } = await supabase
-    .from("players")
-    .select("name")
-    .eq("game_code", code);
-
+  const existingPlayers = playersResult.data;
   if (
     existingPlayers?.some(
       (p) => p.name.toLowerCase() === playerName.toLowerCase()
@@ -348,18 +338,20 @@ export async function endRound(
 
   if (gameError) return null;
 
-  // Update all players
-  for (const player of updatedPlayers) {
-    await supabase
-      .from("players")
-      .update({
-        population: player.population,
-        is_eliminated: player.isEliminated,
-        has_chosen: false,
-        current_choice: null,
-      })
-      .eq("id", player.id);
-  }
+  // Update all players in parallel
+  await Promise.all(
+    updatedPlayers.map((player) =>
+      supabase
+        .from("players")
+        .update({
+          population: player.population,
+          is_eliminated: player.isEliminated,
+          has_chosen: false,
+          current_choice: null,
+        })
+        .eq("id", player.id)
+    )
+  );
 
   return await getGame(code);
 }
