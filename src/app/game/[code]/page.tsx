@@ -16,19 +16,27 @@ export default function GamePage() {
   const router = useRouter();
   const code = (params.code as string).toUpperCase();
 
-  const [playerInfo, setPlayerInfo] = useState<{
+  const [playerInfo] = useState<{
     playerId: string;
     isHost: boolean;
-  } | null>(null);
+    secretToken: string;
+  } | null>(() => {
+    // Initialize from sessionStorage on client
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem(`game_${code}`);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    }
+    return null;
+  });
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(`game_${code}`);
-    if (stored) {
-      setPlayerInfo(JSON.parse(stored));
-    } else {
+    // Redirect if no player info found
+    if (playerInfo === null) {
       router.push("/");
     }
-  }, [code, router]);
+  }, [playerInfo, router]);
 
   const { data: initialState, isLoading, error } = trpc.game.getState.useQuery(
     { code },
@@ -161,6 +169,7 @@ export default function GamePage() {
               gameState={currentState}
               playerId={playerInfo.playerId}
               isHost={playerInfo.isHost}
+              secretToken={playerInfo.secretToken}
               onGameUpdate={handleGameUpdate}
             />
           </motion.div>
@@ -177,6 +186,7 @@ export default function GamePage() {
               gameState={currentState}
               playerId={playerInfo.playerId}
               isHost={playerInfo.isHost}
+              secretToken={playerInfo.secretToken}
               onGameUpdate={handleGameUpdate}
             />
           </motion.div>
@@ -193,6 +203,7 @@ export default function GamePage() {
               gameState={currentState}
               playerId={playerInfo.playerId}
               isHost={playerInfo.isHost}
+              secretToken={playerInfo.secretToken}
               onGameUpdate={handleGameUpdate}
             />
           </motion.div>

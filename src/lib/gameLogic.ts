@@ -97,15 +97,22 @@ export function processRound(
 
 /**
  * Get leaderboard sorted by population (descending)
+ * Optimized: single reduce pass for filter + copy, then sort
  */
 export function getLeaderboard(
   players: Player[]
 ): Array<{ rank: number; player: Player }> {
-  const sorted = [...players]
-    .filter((p) => !p.isHost || players.length === 1)
-    .sort((a, b) => b.population - a.population);
+  // Single pass: filter while copying to avoid intermediate array
+  const eligiblePlayers: Player[] = [];
+  for (const p of players) {
+    if (!p.isHost || players.length === 1) {
+      eligiblePlayers.push(p);
+    }
+  }
 
-  return sorted.map((player, index) => ({
+  eligiblePlayers.sort((a, b) => b.population - a.population);
+
+  return eligiblePlayers.map((player, index) => ({
     rank: index + 1,
     player,
   }));
@@ -113,18 +120,26 @@ export function getLeaderboard(
 
 /**
  * Check if all non-eliminated players have made their choice
+ * Optimized: single pass with compound condition instead of filter().every()
  */
 export function allPlayersChosen(players: Player[]): boolean {
-  return players
-    .filter((p) => !p.isEliminated && !p.isHost)
-    .every((p) => p.hasChosen);
+  return players.every(
+    (p) => p.isEliminated || p.isHost || p.hasChosen
+  );
 }
 
 /**
  * Get active player count (non-eliminated, non-host)
+ * Optimized: single pass count instead of filter().length
  */
 export function getActivePlayerCount(players: Player[]): number {
-  return players.filter((p) => !p.isEliminated && !p.isHost).length;
+  let count = 0;
+  for (const p of players) {
+    if (!p.isEliminated && !p.isHost) {
+      count++;
+    }
+  }
+  return count;
 }
 
 /**

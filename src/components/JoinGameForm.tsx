@@ -19,7 +19,7 @@ export function JoinGameForm() {
     onSuccess: (data) => {
       sessionStorage.setItem(
         `game_${data.gameState.code}`,
-        JSON.stringify({ playerId: data.playerId, isHost: false })
+        JSON.stringify({ playerId: data.playerId, isHost: false, secretToken: data.secretToken })
       );
       router.push(`/game/${data.gameState.code}`);
     },

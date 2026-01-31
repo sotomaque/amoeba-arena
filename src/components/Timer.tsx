@@ -1,7 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+
+// Hoisted animation configs - avoids recreation on every render
+const ANIMATIONS = {
+  criticalPulse: {
+    animate: { scale: [1, 1.02, 1] },
+    transition: { duration: 0.5, repeat: Infinity },
+  },
+  pausePulse: {
+    animate: { scale: [1, 1.2, 1] },
+    transition: { duration: 1, repeat: Infinity },
+  },
+  clockSpin: {
+    animate: { rotate: [0, 360] },
+    transition: { duration: 4, repeat: Infinity, ease: "linear" as const },
+  },
+  timePulse: {
+    animate: { scale: [1, 1.1, 1] },
+    transition: { duration: 0.5, repeat: Infinity },
+  },
+  fadeIn: { initial: { opacity: 0 }, animate: { opacity: 1 } },
+} as const;
+
+const REDUCED_MOTION_EMPTY = {} as const;
 
 interface TimerProps {
   startTime: number | null;
@@ -13,64 +36,78 @@ interface TimerProps {
 
 export function Timer({ startTime, duration, pausedTimeRemaining, isPaused, onExpire }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(duration);
-  const [hasExpired, setHasExpired] = useState(false);
+  const hasExpiredRef = useRef(false);
   const shouldReduceMotion = useReducedMotion();
 
+  // Reset expired state when round changes
   useEffect(() => {
+    hasExpiredRef.current = false;
+  }, [startTime]);
+
+  // Timer effect - handles all time updates
+  useEffect(() => {
+    // If paused, use the paused time
     if (isPaused && pausedTimeRemaining !== null && pausedTimeRemaining !== undefined) {
       setTimeLeft(pausedTimeRemaining);
       return;
     }
 
-    if (!startTime) return;
+    // If no start time, use full duration
+    if (!startTime) {
+      setTimeLeft(duration);
+      return;
+    }
 
-    const updateTimer = () => {
+    // Calculate and set initial time, then start interval
+    const calculateRemaining = () => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = Math.max(0, duration - elapsed);
-      setTimeLeft(remaining);
-
-      if (remaining === 0 && !hasExpired) {
-        setHasExpired(true);
-        onExpire?.();
-      }
+      return Math.max(0, duration - elapsed);
     };
 
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
+    // Set initial value
+    setTimeLeft(calculateRemaining());
+
+    // Start interval for updates
+    const interval = setInterval(() => {
+      const remaining = calculateRemaining();
+      setTimeLeft(remaining);
+
+      if (remaining === 0 && !hasExpiredRef.current) {
+        hasExpiredRef.current = true;
+        onExpire?.();
+      }
+    }, 1000);
 
     return () => clearInterval(interval);
-  }, [startTime, duration, onExpire, hasExpired, isPaused, pausedTimeRemaining]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startTime, duration, isPaused, pausedTimeRemaining]);
 
   const progress = (timeLeft / duration) * 100;
   const isLow = timeLeft <= 10;
   const isCritical = timeLeft <= 5;
 
-  // Animation helpers
-  const criticalPulse = shouldReduceMotion
-    ? {}
-    : isCritical && !isPaused
-      ? { animate: { scale: [1, 1.02, 1] }, transition: { duration: 0.5, repeat: Infinity } }
-      : {};
+  // Animation helpers - use hoisted configs to avoid recreation
+  const criticalPulse = shouldReduceMotion || !isCritical || isPaused
+    ? REDUCED_MOTION_EMPTY
+    : ANIMATIONS.criticalPulse;
 
   const pausePulse = shouldReduceMotion
-    ? {}
-    : { animate: { scale: [1, 1.2, 1] }, transition: { duration: 1, repeat: Infinity } };
+    ? REDUCED_MOTION_EMPTY
+    : ANIMATIONS.pausePulse;
 
   const clockSpin = shouldReduceMotion
-    ? {}
-    : { animate: { rotate: [0, 360] }, transition: { duration: 4, repeat: Infinity, ease: "linear" } };
+    ? REDUCED_MOTION_EMPTY
+    : ANIMATIONS.clockSpin;
 
-  const timePulse = shouldReduceMotion
-    ? {}
-    : isLow && !isPaused
-      ? { animate: { scale: [1, 1.1, 1] }, transition: { duration: 0.5, repeat: Infinity } }
-      : {};
+  const timePulse = shouldReduceMotion || !isLow || isPaused
+    ? REDUCED_MOTION_EMPTY
+    : ANIMATIONS.timePulse;
 
   const progressBarAnimation = shouldReduceMotion
     ? { style: { width: `${progress}%` } }
     : { initial: { width: "100%" }, animate: { width: `${progress}%` }, transition: { duration: 0.3 } };
 
-  const fadeIn = { initial: { opacity: 0 }, animate: { opacity: 1 } };
+  const fadeIn = ANIMATIONS.fadeIn;
 
   return (
     <motion.div

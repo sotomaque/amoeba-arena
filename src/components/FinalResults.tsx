@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import type { GameState } from "@/lib/types";
 import { Leaderboard } from "./Leaderboard";
+import { LessonsLearned } from "./LessonsLearned";
 import { getLeaderboard } from "@/lib/gameLogic";
 
 interface FinalResultsProps {
@@ -242,12 +243,12 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
 								className="inline-block px-8 py-4 bg-gradient-to-r from-forest/10 to-meadow/10 rounded-2xl border-2 border-forest/30"
 								{...hoverScale}
 							>
-								<h2 className="text-3xl md:text-4xl font-bold text-forest mb-2">
+								<h2 className="text-3xl md:text-4xl font-bold text-forest dark:text-meadow mb-2">
 									{winner.player.name}
 								</h2>
 								<div className="flex items-center justify-center gap-2 text-xl text-muted-foreground">
 									<motion.span {...pulseAnimation}>🦠</motion.span>
-									<span className="font-bold text-forest font-mono">
+									<span className="font-bold text-forest dark:text-meadow font-mono">
 										{winner.player.population.toLocaleString()}
 									</span>
 									<span>amoebas</span>
@@ -278,7 +279,7 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
 						</span>
 						<p className="text-xl">
 							You finished in{" "}
-							<span className="font-bold text-forest">#{playerRank}</span>{" "}
+							<span className="font-bold text-forest dark:text-meadow">#{playerRank}</span>{" "}
 							place!
 						</p>
 					</div>
@@ -341,12 +342,15 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
 							<motion.div className="text-2xl mb-2" {...statFloat(index)}>
 								{stat.icon}
 							</motion.div>
-							<div className="text-2xl font-bold text-forest">{stat.value}</div>
+							<div className="text-2xl font-bold text-forest dark:text-meadow">{stat.value}</div>
 							<div className="text-xs text-muted-foreground">{stat.label}</div>
 						</motion.div>
 					))}
 				</div>
 			</motion.div>
+
+			{/* Lessons Learned - Educational Content */}
+			<LessonsLearned />
 
 			{/* Play Again Button */}
 			<motion.div className="text-center" {...fadeInUp(0.9)}>

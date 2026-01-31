@@ -12,6 +12,7 @@ interface RoundResultsProps {
   gameState: GameState;
   playerId: string;
   isHost: boolean;
+  secretToken: string;
   onGameUpdate: (state: GameState) => void;
 }
 
@@ -19,6 +20,7 @@ export function RoundResults({
   gameState,
   playerId,
   isHost,
+  secretToken,
   onGameUpdate,
 }: RoundResultsProps) {
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function RoundResults({
 
   const handleNext = () => {
     setError(null);
-    nextRound.mutate({ code: gameState.code, hostId: playerId });
+    nextRound.mutate({ code: gameState.code, hostId: playerId, secretToken });
   };
 
   // Animation helpers

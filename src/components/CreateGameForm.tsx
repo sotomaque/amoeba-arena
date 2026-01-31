@@ -25,7 +25,7 @@ export function CreateGameForm() {
     onSuccess: (data) => {
       sessionStorage.setItem(
         `game_${data.code}`,
-        JSON.stringify({ playerId: data.hostId, isHost: true })
+        JSON.stringify({ playerId: data.hostId, isHost: true, secretToken: data.secretToken })
       );
       router.push(`/game/${data.code}`);
     },

@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
-import type { GameState, Player, GameUpdate } from "./types";
+import type { GameState, Player, RoundResult } from "./types";
+import type { Database } from "./database.types";
 import {
   generateGameCode,
   processRound,
@@ -8,8 +9,36 @@ import {
 } from "./gameLogic";
 import { getShuffledScenarioIds, getScenarioById } from "./scenarios";
 
+type GameRow = Database["public"]["Tables"]["games"]["Row"];
+type PlayerRow = Database["public"]["Tables"]["players"]["Row"];
+
+// Generate a secure random token for player authentication
+function generateSecretToken(): string {
+  return `${Date.now()}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
+
+// Verify that a player's secret token is valid
+export async function verifyPlayer(
+  playerId: string,
+  secretToken: string
+): Promise<{ valid: boolean; isHost: boolean; gameCode: string | null }> {
+  const supabase = await createClient();
+
+  const { data: player } = await supabase
+    .from("players")
+    .select("id, secret_token, is_host, game_code")
+    .eq("id", playerId)
+    .single();
+
+  if (!player || player.secret_token !== secretToken) {
+    return { valid: false, isHost: false, gameCode: null };
+  }
+
+  return { valid: true, isHost: player.is_host, gameCode: player.game_code };
+}
+
 // Helper to convert DB rows to GameState
-function rowsToGameState(gameRow: any, playerRows: any[]): GameState {
+function rowsToGameState(gameRow: GameRow, playerRows: PlayerRow[]): GameState {
   const players: Player[] = playerRows.map((p) => ({
     id: p.id,
     name: p.name,
@@ -37,7 +66,7 @@ function rowsToGameState(gameRow: any, playerRows: any[]): GameState {
       ? new Date(gameRow.round_start_time).getTime()
       : null,
     roundDuration: ROUND_DURATION,
-    roundResults: gameRow.round_results || [],
+    roundResults: (gameRow.round_results as unknown as RoundResult[]) || [],
     pausedTimeRemaining: gameRow.paused_time_remaining,
   };
 }
@@ -45,7 +74,7 @@ function rowsToGameState(gameRow: any, playerRows: any[]): GameState {
 export async function createGame(
   hostName: string,
   totalRounds: number = 10
-): Promise<{ code: string; hostId: string }> {
+): Promise<{ code: string; hostId: string; secretToken: string }> {
   const supabase = await createClient();
   let code = generateGameCode();
 
@@ -57,6 +86,7 @@ export async function createGame(
   }
 
   const hostId = `host_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const secretToken = generateSecretToken();
 
   // Create game
   const { error: gameError } = await supabase.from("games").insert({
@@ -73,7 +103,7 @@ export async function createGame(
 
   if (gameError) throw gameError;
 
-  // Create host player
+  // Create host player with secret token
   const { error: playerError } = await supabase.from("players").insert({
     id: hostId,
     game_code: code,
@@ -83,11 +113,12 @@ export async function createGame(
     has_chosen: false,
     current_choice: null,
     is_eliminated: false,
+    secret_token: secretToken,
   });
 
   if (playerError) throw playerError;
 
-  return { code, hostId };
+  return { code, hostId, secretToken };
 }
 
 export async function getGame(code: string): Promise<GameState | null> {
@@ -108,7 +139,7 @@ export async function getGame(code: string): Promise<GameState | null> {
 export async function joinGame(
   code: string,
   playerName: string
-): Promise<{ playerId: string; gameState: GameState } | null> {
+): Promise<{ playerId: string; secretToken: string; gameState: GameState } | null> {
   const supabase = await createClient();
 
   // Parallelize game and existing players fetch
@@ -131,6 +162,7 @@ export async function joinGame(
   }
 
   const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const secretToken = generateSecretToken();
 
   const { error } = await supabase.from("players").insert({
     id: playerId,
@@ -141,12 +173,13 @@ export async function joinGame(
     has_chosen: false,
     current_choice: null,
     is_eliminated: false,
+    secret_token: secretToken,
   });
 
   if (error) return null;
 
   const gameState = await getGame(code);
-  return gameState ? { playerId, gameState } : null;
+  return gameState ? { playerId, secretToken, gameState } : null;
 }
 
 export async function removePlayer(

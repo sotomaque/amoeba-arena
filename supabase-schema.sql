@@ -25,8 +25,12 @@ CREATE TABLE IF NOT EXISTS players (
   has_chosen BOOLEAN NOT NULL DEFAULT FALSE,
   current_choice TEXT,
   is_eliminated BOOLEAN NOT NULL DEFAULT FALSE,
+  secret_token TEXT NOT NULL DEFAULT gen_random_uuid()::text,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migration: Add secret_token to existing players table
+-- ALTER TABLE players ADD COLUMN IF NOT EXISTS secret_token TEXT NOT NULL DEFAULT gen_random_uuid()::text;
 
 -- Index for faster player lookups by game
 CREATE INDEX IF NOT EXISTS idx_players_game_code ON players(game_code);

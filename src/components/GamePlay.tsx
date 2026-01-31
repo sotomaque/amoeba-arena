@@ -13,10 +13,11 @@ interface GamePlayProps {
   gameState: GameState;
   playerId: string;
   isHost: boolean;
+  secretToken: string;
   onGameUpdate: (state: GameState) => void;
 }
 
-export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlayProps) {
+export function GamePlay({ gameState, playerId, isHost, secretToken, onGameUpdate }: GamePlayProps) {
   const [selectedChoice, setSelectedChoice] = useState<"safe" | "risky" | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
     makeChoice.mutate({
       code: gameState.code,
       playerId,
+      secretToken,
       choice: selectedChoice,
     });
   };
@@ -80,18 +82,18 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
   const handleEndRound = useCallback(() => {
     if (isHost && !isPaused) {
       setError(null);
-      endRound.mutate({ code: gameState.code, hostId: playerId });
+      endRound.mutate({ code: gameState.code, hostId: playerId, secretToken });
     }
-  }, [isHost, isPaused, gameState.code, playerId, endRound]);
+  }, [isHost, isPaused, gameState.code, playerId, secretToken, endRound]);
 
   const handlePause = () => {
     setError(null);
-    pauseRound.mutate({ code: gameState.code, hostId: playerId });
+    pauseRound.mutate({ code: gameState.code, hostId: playerId, secretToken });
   };
 
   const handleResume = () => {
     setError(null);
-    resumeRound.mutate({ code: gameState.code, hostId: playerId });
+    resumeRound.mutate({ code: gameState.code, hostId: playerId, secretToken });
   };
 
   const playersChosen = gameState.players.filter(
@@ -406,7 +408,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
               type="button"
               onClick={() => {
                 setError(null);
-                endRound.mutate({ code: gameState.code, hostId: playerId });
+                endRound.mutate({ code: gameState.code, hostId: playerId, secretToken });
               }}
               disabled={endRound.isPending}
               className="flex-1 h-12 rounded-xl ghibli-button bg-pond hover:bg-pond/90"

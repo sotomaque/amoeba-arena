@@ -10,10 +10,11 @@ interface LobbyProps {
   gameState: GameState;
   playerId: string;
   isHost: boolean;
+  secretToken: string;
   onGameUpdate: (state: GameState) => void;
 }
 
-export function Lobby({ gameState, playerId, isHost, onGameUpdate }: LobbyProps) {
+export function Lobby({ gameState, playerId, isHost, secretToken, onGameUpdate }: LobbyProps) {
   const [error, setError] = useState<string | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
@@ -28,7 +29,7 @@ export function Lobby({ gameState, playerId, isHost, onGameUpdate }: LobbyProps)
 
   const handleStart = () => {
     setError(null);
-    startGame.mutate({ code: gameState.code, hostId: playerId });
+    startGame.mutate({ code: gameState.code, hostId: playerId, secretToken });
   };
 
   const players = gameState.players.filter((p) => !p.isHost);

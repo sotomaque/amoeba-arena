@@ -57,6 +57,7 @@ export interface Database {
           has_chosen: boolean;
           current_choice: string | null;
           is_eliminated: boolean;
+          secret_token: string;
           created_at: string;
         };
         Insert: {
@@ -68,6 +69,7 @@ export interface Database {
           has_chosen?: boolean;
           current_choice?: string | null;
           is_eliminated?: boolean;
+          secret_token?: string;
           created_at?: string;
         };
         Update: {
@@ -79,6 +81,7 @@ export interface Database {
           has_chosen?: boolean;
           current_choice?: string | null;
           is_eliminated?: boolean;
+          secret_token?: string;
           created_at?: string;
         };
       };
