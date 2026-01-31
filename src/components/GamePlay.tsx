@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import type { GameState } from "@/lib/types";
 import { ScenarioCard } from "./ScenarioCard";
@@ -19,6 +19,8 @@ interface GamePlayProps {
 export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlayProps) {
   const [selectedChoice, setSelectedChoice] = useState<"safe" | "risky" | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   const currentPlayer = gameState.players.find((p) => p.id === playerId);
   const scenario = gameState.currentScenario;
@@ -29,8 +31,8 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
       setHasSubmitted(true);
       onGameUpdate(data);
     },
-    onError: (error) => {
-      alert(error.message);
+    onError: (err) => {
+      setError(err.message);
     },
   });
 
@@ -38,8 +40,8 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
     onSuccess: (data) => {
       onGameUpdate(data);
     },
-    onError: (error) => {
-      alert(error.message);
+    onError: (err) => {
+      setError(err.message);
     },
   });
 
@@ -47,8 +49,8 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
     onSuccess: (data) => {
       onGameUpdate(data);
     },
-    onError: (error) => {
-      alert(error.message);
+    onError: (err) => {
+      setError(err.message);
     },
   });
 
@@ -56,8 +58,8 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
     onSuccess: (data) => {
       onGameUpdate(data);
     },
-    onError: (error) => {
-      alert(error.message);
+    onError: (err) => {
+      setError(err.message);
     },
   });
 
@@ -67,6 +69,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
   const handleSubmit = () => {
     if (!selectedChoice) return;
+    setError(null);
     makeChoice.mutate({
       code: gameState.code,
       playerId,
@@ -76,15 +79,18 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
   const handleEndRound = useCallback(() => {
     if (isHost && !isPaused) {
+      setError(null);
       endRound.mutate({ code: gameState.code, hostId: playerId });
     }
   }, [isHost, isPaused, gameState.code, playerId, endRound]);
 
   const handlePause = () => {
+    setError(null);
     pauseRound.mutate({ code: gameState.code, hostId: playerId });
   };
 
   const handleResume = () => {
+    setError(null);
     resumeRound.mutate({ code: gameState.code, hostId: playerId });
   };
 
@@ -95,14 +101,75 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
     (p) => !p.isHost && !p.isEliminated
   ).length;
 
+  // Animation helpers
+  const spinAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { rotate: 360 }, transition: { duration: 2, repeat: Infinity, ease: "linear" } };
+
+  const fadeInDown = shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0, y: -20 }, animate: { opacity: 1, y: 0 } };
+
+  const fadeInScale = shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0, scale: 0.95 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.5 } };
+
+  const pausePulse = shouldReduceMotion
+    ? {}
+    : { animate: { scale: [1, 1.1, 1] }, transition: { duration: 1.5, repeat: Infinity } };
+
+  const fadeInUp = shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
+
+  const colonyPulse = shouldReduceMotion
+    ? {}
+    : { animate: { scale: [1, 1.1, 1] }, transition: { duration: 2, repeat: Infinity } };
+
+  const popAnimation = shouldReduceMotion
+    ? {}
+    : { initial: { scale: 1.2 }, animate: { scale: 1 }, transition: { type: "spring", stiffness: 200 } };
+
+  const choiceButtonProps = (direction: "left" | "right", disabled: boolean) => {
+    if (shouldReduceMotion) {
+      return {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+      };
+    }
+    return {
+      whileHover: !disabled ? { y: -4 } : {},
+      whileTap: !disabled ? { scale: 0.98 } : {},
+      initial: { opacity: 0, x: direction === "left" ? -20 : 20 },
+      animate: { opacity: 1, x: 0 },
+      exit: { opacity: 0, x: direction === "left" ? -20 : 20 },
+      transition: { duration: 0.4 },
+    };
+  };
+
+  const selectedPulse = (isSelected: boolean) => shouldReduceMotion
+    ? {}
+    : isSelected
+      ? { animate: { scale: [1, 1.2, 1] }, transition: { duration: 0.3 } }
+      : {};
+
+  const loadingPulse = shouldReduceMotion
+    ? {}
+    : { animate: { opacity: [1, 0.5, 1] }, transition: { duration: 1, repeat: Infinity } };
+
+  const floatAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { y: [0, -5, 0] }, transition: { duration: 2, repeat: Infinity } };
+
+  const progressAnimation = shouldReduceMotion
+    ? { style: { width: `${(playersChosen / totalActivePlayers) * 100}%` } }
+    : { initial: { width: 0 }, animate: { width: `${(playersChosen / totalActivePlayers) * 100}%` }, transition: { duration: 0.5 } };
+
   if (!scenario) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          className="text-4xl"
-        >
+        <motion.div {...spinAnimation} className="text-4xl">
           🌀
         </motion.div>
       </div>
@@ -114,11 +181,18 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
+      {/* Error Alert */}
+      {error && (
+        <div
+          role="alert"
+          className="p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl text-center"
+        >
+          {error}
+        </div>
+      )}
+
       {/* Timer */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div {...fadeInDown}>
         <Timer
           startTime={gameState.roundStartTime}
           duration={gameState.roundDuration}
@@ -129,11 +203,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
       </motion.div>
 
       {/* Scenario */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-      >
+      <motion.div {...fadeInScale}>
         <ScenarioCard
           scenario={scenario}
           roundNumber={gameState.currentRound}
@@ -145,17 +215,12 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
       {isPaused && !isHost && (
         <motion.div
           className="ghibli-card p-6 text-center bg-sunset/10 border-sunset/30"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          {...fadeInScale}
         >
-          <motion.div
-            className="text-4xl mb-3"
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-          >
+          <motion.div className="text-4xl mb-3" {...pausePulse}>
             ⏸️
           </motion.div>
-          <h3 className="text-xl font-semibold text-sunset mb-2">Game Paused</h3>
+          <h2 className="text-xl font-semibold text-sunset mb-2">Game Paused</h2>
           <p className="text-muted-foreground">
             The host has paused the game. Please wait for them to resume.
           </p>
@@ -164,18 +229,10 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
       {/* Player Population */}
       {currentPlayer && !isHost && (
-        <motion.div
-          className="ghibli-card p-6"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
+        <motion.div className="ghibli-card p-6" {...fadeInUp}>
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <motion.span
-                className="text-3xl"
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
+              <motion.span className="text-3xl" {...colonyPulse}>
                 🦠
               </motion.span>
               <span className="text-lg text-muted-foreground">Your Colony:</span>
@@ -183,9 +240,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
             <motion.span
               className="text-4xl font-bold text-forest"
               key={currentPlayer.population}
-              initial={{ scale: 1.2 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200 }}
+              {...popAnimation}
             >
               {currentPlayer.population.toLocaleString()}
             </motion.span>
@@ -195,6 +250,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
               className="mt-4 p-3 bg-destructive/10 rounded-xl text-center text-destructive"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
+              role="alert"
             >
               Your colony has perished! 🥀
             </motion.div>
@@ -204,27 +260,23 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
       {/* Choice Buttons */}
       {!isHost && !isEliminated && !isPaused && (
-        <div className="grid md:grid-cols-2 gap-6">
+        <fieldset className="grid md:grid-cols-2 gap-6">
+          <legend className="sr-only">Choose your strategy</legend>
           <AnimatePresence>
             {/* Safe Choice */}
             <motion.button
+              type="button"
+              role="radio"
+              aria-checked={selectedChoice === "safe"}
               className={`p-6 rounded-2xl text-left transition-all choice-safe ${
                 selectedChoice === "safe" ? "selected" : ""
               } ${alreadyChosen ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
               onClick={() => !alreadyChosen && handleChoice("safe")}
               disabled={alreadyChosen}
-              whileHover={!alreadyChosen ? { y: -4 } : {}}
-              whileTap={!alreadyChosen ? { scale: 0.98 } : {}}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4 }}
+              {...choiceButtonProps("left", !!alreadyChosen)}
             >
               <div className="flex items-center gap-3 mb-3">
-                <motion.span
-                  className="text-3xl"
-                  animate={selectedChoice === "safe" ? { scale: [1, 1.2, 1] } : {}}
-                  transition={{ duration: 0.3 }}
-                >
+                <motion.span className="text-3xl" {...selectedPulse(selectedChoice === "safe")}>
                   🌿
                 </motion.span>
                 <span className="text-xl font-semibold text-forest">SAFE</span>
@@ -242,23 +294,18 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
             {/* Risky Choice */}
             <motion.button
+              type="button"
+              role="radio"
+              aria-checked={selectedChoice === "risky"}
               className={`p-6 rounded-2xl text-left transition-all choice-risky ${
                 selectedChoice === "risky" ? "selected" : ""
               } ${alreadyChosen ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
               onClick={() => !alreadyChosen && handleChoice("risky")}
               disabled={alreadyChosen}
-              whileHover={!alreadyChosen ? { y: -4 } : {}}
-              whileTap={!alreadyChosen ? { scale: 0.98 } : {}}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4 }}
+              {...choiceButtonProps("right", !!alreadyChosen)}
             >
               <div className="flex items-center gap-3 mb-3">
-                <motion.span
-                  className="text-3xl"
-                  animate={selectedChoice === "risky" ? { scale: [1, 1.2, 1] } : {}}
-                  transition={{ duration: 0.3 }}
-                >
+                <motion.span className="text-3xl" {...selectedPulse(selectedChoice === "risky")}>
                   🔥
                 </motion.span>
                 <span className="text-xl font-semibold text-sunset">RISKY</span>
@@ -274,23 +321,19 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
               </div>
             </motion.button>
           </AnimatePresence>
-        </div>
+        </fieldset>
       )}
 
       {/* Submit Button */}
       {!isHost && !isEliminated && !alreadyChosen && selectedChoice && !isPaused && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
+        <motion.div {...fadeInUp} transition={shouldReduceMotion ? undefined : { duration: 0.3 }}>
           <Button
             onClick={handleSubmit}
             disabled={makeChoice.isPending}
             className="w-full h-14 text-xl font-semibold rounded-2xl ghibli-button bg-forest hover:bg-forest-dark"
           >
             {makeChoice.isPending ? (
-              <motion.span animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 1, repeat: Infinity }}>
+              <motion.span {...loadingPulse}>
                 Submitting...
               </motion.span>
             ) : (
@@ -304,16 +347,8 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
       {/* Waiting State */}
       {!isHost && alreadyChosen && !isPaused && (
-        <motion.div
-          className="ghibli-card p-6 text-center"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <motion.div
-            className="text-4xl mb-3"
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
+        <motion.div className="ghibli-card p-6 text-center" {...fadeInScale}>
+          <motion.div className="text-4xl mb-3" {...floatAnimation}>
             ✨
           </motion.div>
           <p className="text-lg text-forest font-medium">Choice submitted!</p>
@@ -323,11 +358,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
       {/* Host View */}
       {isHost && (
-        <motion.div
-          className="ghibli-card p-6"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
+        <motion.div className="ghibli-card p-6" {...fadeInUp}>
           <div className="flex justify-between items-center mb-4">
             <span className="text-lg font-semibold flex items-center gap-2">
               <span>📊</span> Players answered:
@@ -336,12 +367,17 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
               {playersChosen} / {totalActivePlayers}
             </span>
           </div>
-          <div className="w-full bg-muted rounded-full h-3 mb-4 overflow-hidden">
+          <div
+            className="w-full bg-muted rounded-full h-3 mb-4 overflow-hidden"
+            role="progressbar"
+            aria-valuenow={playersChosen}
+            aria-valuemin={0}
+            aria-valuemax={totalActivePlayers}
+            aria-label={`${playersChosen} of ${totalActivePlayers} players answered`}
+          >
             <motion.div
               className="h-full bg-gradient-to-r from-forest to-meadow rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${(playersChosen / totalActivePlayers) * 100}%` }}
-              transition={{ duration: 0.5 }}
+              {...progressAnimation}
             />
           </div>
 
@@ -349,6 +385,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
           <div className="flex gap-3">
             {isPaused ? (
               <Button
+                type="button"
                 onClick={handleResume}
                 disabled={resumeRound.isPending}
                 className="flex-1 h-12 rounded-xl ghibli-button bg-forest hover:bg-forest-dark"
@@ -357,6 +394,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
               </Button>
             ) : (
               <Button
+                type="button"
                 onClick={handlePause}
                 disabled={pauseRound.isPending}
                 className="flex-1 h-12 rounded-xl ghibli-button bg-sunset hover:bg-sunset/90"
@@ -365,7 +403,11 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
               </Button>
             )}
             <Button
-              onClick={() => endRound.mutate({ code: gameState.code, hostId: playerId })}
+              type="button"
+              onClick={() => {
+                setError(null);
+                endRound.mutate({ code: gameState.code, hostId: playerId });
+              }}
               disabled={endRound.isPending}
               className="flex-1 h-12 rounded-xl ghibli-button bg-pond hover:bg-pond/90"
             >
@@ -382,9 +424,8 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
       {/* Mini Leaderboard */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
+        {...fadeInUp}
+        transition={shouldReduceMotion ? undefined : { delay: 0.2 }}
       >
         <Leaderboard players={gameState.players} currentPlayerId={playerId} compact />
       </motion.div>

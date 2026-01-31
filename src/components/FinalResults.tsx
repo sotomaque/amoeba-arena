@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import type { GameState } from "@/lib/types";
@@ -14,12 +15,17 @@ interface FinalResultsProps {
 }
 
 export function FinalResults({ gameState, playerId }: FinalResultsProps) {
+  const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
   const leaderboard = getLeaderboard(gameState.players);
   const winner = leaderboard[0];
   const playerRank = leaderboard.findIndex((l) => l.player.id === playerId) + 1;
   const isWinner = playerId === winner?.player.id;
 
   const fireConfetti = useCallback(() => {
+    // Skip confetti if user prefers reduced motion
+    if (shouldReduceMotion) return;
+
     // Nature-themed confetti colors
     const colors = ["#4a7c59", "#87b5c9", "#a8c686", "#e8a87c", "#6b9b7a"];
 
@@ -83,7 +89,7 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
 
     // Stop continuous confetti after 5 seconds
     setTimeout(() => clearInterval(interval), 5000);
-  }, []);
+  }, [shouldReduceMotion]);
 
   useEffect(() => {
     // Fire confetti when component mounts
@@ -92,95 +98,111 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
   }, [fireConfetti]);
 
   const handlePlayAgain = () => {
-    window.location.href = "/";
+    router.push("/");
   };
 
   const handleFireMoreConfetti = () => {
     fireConfetti();
   };
 
+  // Animation helpers
+  const fadeInScale = shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0, scale: 0.9 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.5, type: "spring" } };
+
+  const floatingElements = (index: number) => shouldReduceMotion
+    ? {}
+    : {
+        animate: { y: [0, -30, 0], opacity: [0.3, 0.7, 0.3], rotate: [0, 10, -10, 0] },
+        transition: { duration: 3 + index * 0.5, repeat: Infinity, delay: index * 0.3 },
+      };
+
+  const slideUp = (delay: number) => shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { y: 20 }, animate: { y: 0 }, transition: { delay } };
+
+  const trophyAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }, transition: { duration: 2, repeat: Infinity } };
+
+  const fadeIn = (delay: number) => shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { delay } };
+
+  const fadeInUp = (delay: number) => shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay } };
+
+  const hoverScale = shouldReduceMotion
+    ? {}
+    : { whileHover: { scale: 1.02 } };
+
+  const pulseAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { scale: [1, 1.2, 1] }, transition: { duration: 2, repeat: Infinity } };
+
+  const confettiButtonHover = shouldReduceMotion
+    ? {}
+    : { whileHover: { rotate: [0, -10, 10, 0] }, transition: { duration: 0.3 } };
+
+  const statFloat = (index: number) => shouldReduceMotion
+    ? {}
+    : { animate: { y: [0, -3, 0] }, transition: { duration: 2, repeat: Infinity, delay: index * 0.2 } };
+
+  const decorFloat = (index: number) => shouldReduceMotion
+    ? {}
+    : { animate: { y: [0, -5, 0] }, transition: { duration: 2, repeat: Infinity, delay: index * 0.2 } };
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-8">
       {/* Winner Announcement */}
       <motion.div
         className="ghibli-card p-8 text-center overflow-hidden relative"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, type: "spring" }}
+        {...fadeInScale}
       >
         {/* Floating celebration elements */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {[...Array(8)].map((_, i) => (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+          {["🌸", "🍃", "✨", "🌿", "💫", "🌊", "🦠", "🌱"].map((emoji, i) => (
             <motion.span
-              key={i}
+              key={`celebration-${emoji}`}
               className="absolute text-2xl"
               style={{
                 left: `${10 + i * 12}%`,
                 top: "20%",
               }}
-              animate={{
-                y: [0, -30, 0],
-                opacity: [0.3, 0.7, 0.3],
-                rotate: [0, 10, -10, 0],
-              }}
-              transition={{
-                duration: 3 + i * 0.5,
-                repeat: Infinity,
-                delay: i * 0.3,
-              }}
+              {...floatingElements(i)}
             >
-              {["🌸", "🍃", "✨", "🌿", "💫", "🌊", "🦠", "🌱"][i]}
+              {emoji}
             </motion.span>
           ))}
         </div>
 
-        <motion.div
-          className="relative z-10"
-          initial={{ y: 20 }}
-          animate={{ y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <motion.div
-            className="text-8xl mb-6"
-            animate={{
-              scale: [1, 1.1, 1],
-              rotate: [0, 5, -5, 0],
-            }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
+        <motion.div className="relative z-10" {...slideUp(0.2)}>
+          <motion.div className="text-8xl mb-6" {...trophyAnimation}>
             🏆
           </motion.div>
 
           <motion.h1
             className="text-4xl md:text-5xl font-bold gradient-text-nature mb-2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
+            {...fadeIn(0.3)}
           >
             Game Complete!
           </motion.h1>
 
           {winner && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
+            <motion.div {...fadeInUp(0.4)}>
               <p className="text-xl text-muted-foreground mb-4">
                 The pond has a new champion!
               </p>
               <motion.div
                 className="inline-block px-8 py-4 bg-gradient-to-r from-forest/10 to-meadow/10 rounded-2xl border-2 border-forest/30"
-                whileHover={{ scale: 1.02 }}
+                {...hoverScale}
               >
                 <h2 className="text-3xl md:text-4xl font-bold text-forest mb-2">
                   {winner.player.name}
                 </h2>
                 <div className="flex items-center justify-center gap-2 text-xl text-muted-foreground">
-                  <motion.span
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  >
+                  <motion.span {...pulseAnimation}>
                     🦠
                   </motion.span>
                   <span className="font-bold text-forest font-mono">
@@ -194,11 +216,11 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
 
           {/* Confetti button */}
           <motion.button
+            type="button"
             onClick={handleFireMoreConfetti}
             className="mt-4 text-2xl hover:scale-110 transition-transform"
-            whileHover={{ rotate: [0, -10, 10, 0] }}
-            transition={{ duration: 0.3 }}
-            title="Fire more confetti!"
+            {...confettiButtonHover}
+            aria-label="Fire more confetti"
           >
             🎉
           </motion.button>
@@ -207,12 +229,7 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
 
       {/* Player's Final Rank (if not winner) */}
       {playerRank > 0 && !isWinner && (
-        <motion.div
-          className="ghibli-card p-6 text-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-        >
+        <motion.div className="ghibli-card p-6 text-center" {...fadeInUp(0.5)}>
           <div className="flex items-center justify-center gap-3">
             <span className="text-3xl">
               {playerRank === 2 ? "🥈" : playerRank === 3 ? "🥉" : "🌟"}
@@ -228,24 +245,15 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
       )}
 
       {/* Full Leaderboard */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-      >
+      <motion.div {...fadeInUp(0.6)}>
         <Leaderboard players={gameState.players} currentPlayerId={playerId} />
       </motion.div>
 
       {/* Game Statistics */}
-      <motion.div
-        className="ghibli-card p-6"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7 }}
-      >
-        <h3 className="font-semibold mb-6 flex items-center gap-2 text-lg">
+      <motion.div className="ghibli-card p-6" {...fadeInUp(0.7)}>
+        <h2 className="font-semibold mb-6 flex items-center gap-2 text-lg">
           <span>📊</span> Game Statistics
-        </h3>
+        </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: "Rounds Played", value: gameState.totalRounds, icon: "🎯" },
@@ -256,15 +264,11 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
             <motion.div
               key={stat.label}
               className="text-center p-4 bg-muted/50 rounded-xl"
-              initial={{ opacity: 0, y: 10 }}
+              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 + index * 0.1 }}
+              transition={shouldReduceMotion ? undefined : { delay: 0.8 + index * 0.1 }}
             >
-              <motion.div
-                className="text-2xl mb-2"
-                animate={{ y: [0, -3, 0] }}
-                transition={{ duration: 2, repeat: Infinity, delay: index * 0.2 }}
-              >
+              <motion.div className="text-2xl mb-2" {...statFloat(index)}>
                 {stat.icon}
               </motion.div>
               <div className="text-2xl font-bold text-forest">{stat.value}</div>
@@ -275,12 +279,7 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
       </motion.div>
 
       {/* Play Again Button */}
-      <motion.div
-        className="text-center"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.9 }}
-      >
+      <motion.div className="text-center" {...fadeInUp(0.9)}>
         <Button
           onClick={handlePlayAgain}
           className="h-14 px-12 text-xl font-semibold rounded-2xl ghibli-button bg-forest hover:bg-forest-dark"
@@ -296,14 +295,14 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
         className="flex justify-center gap-4 pt-8 opacity-30"
         initial={{ opacity: 0 }}
         animate={{ opacity: 0.3 }}
-        transition={{ delay: 1 }}
+        transition={shouldReduceMotion ? undefined : { delay: 1 }}
+        aria-hidden="true"
       >
-        {["🌿", "🌸", "🦠", "💧", "🍃"].map((emoji, i) => (
+        {["🌿", "🌸", "🦠", "💧", "🍃"].map((emoji, index) => (
           <motion.span
-            key={i}
+            key={`footer-${emoji}`}
             className="text-2xl"
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 2, repeat: Infinity, delay: i * 0.2 }}
+            {...decorFloat(index)}
           >
             {emoji}
           </motion.span>
