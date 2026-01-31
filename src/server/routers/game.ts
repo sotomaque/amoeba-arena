@@ -1,0 +1,103 @@
+import { z } from "zod";
+import { router, publicProcedure } from "../trpc";
+import {
+  createGame,
+  getGame,
+  joinGame,
+  startGame,
+  makeChoice,
+  endRound,
+  nextRound,
+  removePlayer,
+} from "@/lib/gameStore";
+
+export const gameRouter = router({
+  create: publicProcedure
+    .input(z.object({ hostName: z.string().min(1).max(20) }))
+    .mutation(({ input }) => {
+      const result = createGame(input.hostName);
+      return result;
+    }),
+
+  join: publicProcedure
+    .input(
+      z.object({
+        code: z.string().length(6),
+        playerName: z.string().min(1).max(20),
+      })
+    )
+    .mutation(({ input }) => {
+      const result = joinGame(input.code.toUpperCase(), input.playerName);
+      if (!result) {
+        throw new Error("Could not join game. Check the code and try again.");
+      }
+      return result;
+    }),
+
+  getState: publicProcedure
+    .input(z.object({ code: z.string() }))
+    .query(({ input }) => {
+      const game = getGame(input.code.toUpperCase());
+      if (!game) {
+        throw new Error("Game not found");
+      }
+      return game;
+    }),
+
+  start: publicProcedure
+    .input(z.object({ code: z.string(), hostId: z.string() }))
+    .mutation(({ input }) => {
+      const game = startGame(input.code.toUpperCase(), input.hostId);
+      if (!game) {
+        throw new Error("Could not start game");
+      }
+      return game;
+    }),
+
+  choose: publicProcedure
+    .input(
+      z.object({
+        code: z.string(),
+        playerId: z.string(),
+        choice: z.enum(["safe", "risky"]),
+      })
+    )
+    .mutation(({ input }) => {
+      const game = makeChoice(
+        input.code.toUpperCase(),
+        input.playerId,
+        input.choice
+      );
+      if (!game) {
+        throw new Error("Could not record choice");
+      }
+      return game;
+    }),
+
+  endRound: publicProcedure
+    .input(z.object({ code: z.string(), hostId: z.string() }))
+    .mutation(({ input }) => {
+      const game = endRound(input.code.toUpperCase(), input.hostId);
+      if (!game) {
+        throw new Error("Could not end round");
+      }
+      return game;
+    }),
+
+  nextRound: publicProcedure
+    .input(z.object({ code: z.string(), hostId: z.string() }))
+    .mutation(({ input }) => {
+      const game = nextRound(input.code.toUpperCase(), input.hostId);
+      if (!game) {
+        throw new Error("Could not advance to next round");
+      }
+      return game;
+    }),
+
+  leave: publicProcedure
+    .input(z.object({ code: z.string(), playerId: z.string() }))
+    .mutation(({ input }) => {
+      const success = removePlayer(input.code.toUpperCase(), input.playerId);
+      return { success };
+    }),
+});
