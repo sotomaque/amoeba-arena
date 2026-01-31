@@ -77,6 +77,17 @@ describe("Initial Game State", () => {
     expect(state.players[0].population).toBe(INITIAL_POPULATION);
     expect(state.currentRound).toBe(0);
     expect(state.totalRounds).toBe(10);
+    expect(state.pausedTimeRemaining).toBe(null);
+  });
+
+  test("creates state with custom rounds", () => {
+    const state = createInitialGameState("ABC123", "host_1", "TestHost", 5);
+    expect(state.totalRounds).toBe(5);
+  });
+
+  test("creates state with 15 rounds", () => {
+    const state = createInitialGameState("ABC123", "host_1", "TestHost", 15);
+    expect(state.totalRounds).toBe(15);
   });
 });
 

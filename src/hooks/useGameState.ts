@@ -15,7 +15,9 @@ export function useGameState(code: string, initialState?: GameState) {
     if (!code) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?code=${code}`);
+    // WebSocket server runs on port + 1 (e.g., 3001 if Next.js is on 3000)
+    const wsPort = parseInt(window.location.port || "3000", 10) + 1;
+    const ws = new WebSocket(`${protocol}//${window.location.hostname}:${wsPort}/ws?code=${code}`);
 
     ws.onopen = () => {
       setIsConnected(true);

@@ -155,6 +155,7 @@ export function createInitialGameState(
     currentScenario: null,
     roundStartTime: null,
     roundDuration: ROUND_DURATION,
+    pausedTimeRemaining: null,
     roundResults: [],
     hostId,
   };

@@ -9,13 +9,20 @@ import {
   endRound,
   nextRound,
   removePlayer,
+  pauseRound,
+  resumeRound,
 } from "@/lib/gameStore";
 
 export const gameRouter = router({
   create: publicProcedure
-    .input(z.object({ hostName: z.string().min(1).max(20) }))
+    .input(
+      z.object({
+        hostName: z.string().min(1).max(20),
+        totalRounds: z.number().min(3).max(15).default(10),
+      })
+    )
     .mutation(({ input }) => {
-      const result = createGame(input.hostName);
+      const result = createGame(input.hostName, input.totalRounds);
       return result;
     }),
 
@@ -50,6 +57,26 @@ export const gameRouter = router({
       const game = startGame(input.code.toUpperCase(), input.hostId);
       if (!game) {
         throw new Error("Could not start game");
+      }
+      return game;
+    }),
+
+  pause: publicProcedure
+    .input(z.object({ code: z.string(), hostId: z.string() }))
+    .mutation(({ input }) => {
+      const game = pauseRound(input.code.toUpperCase(), input.hostId);
+      if (!game) {
+        throw new Error("Could not pause round");
+      }
+      return game;
+    }),
+
+  resume: publicProcedure
+    .input(z.object({ code: z.string(), hostId: z.string() }))
+    .mutation(({ input }) => {
+      const game = resumeRound(input.code.toUpperCase(), input.hostId);
+      if (!game) {
+        throw new Error("Could not resume round");
       }
       return game;
     }),

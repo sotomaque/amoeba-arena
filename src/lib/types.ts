@@ -35,7 +35,7 @@ export interface RoundResult {
   }[];
 }
 
-export type GamePhase = "lobby" | "playing" | "results" | "finished";
+export type GamePhase = "lobby" | "playing" | "paused" | "results" | "finished";
 
 export interface GameState {
   code: string;
@@ -47,6 +47,7 @@ export interface GameState {
   currentScenario: Scenario | null;
   roundStartTime: number | null;
   roundDuration: number; // in seconds
+  pausedTimeRemaining: number | null; // time remaining when paused
   roundResults: RoundResult[];
   hostId: string;
 }
@@ -58,6 +59,8 @@ export interface GameUpdate {
     | "player_left"
     | "game_started"
     | "round_started"
+    | "round_paused"
+    | "round_resumed"
     | "player_chose"
     | "round_ended"
     | "game_ended";

@@ -166,7 +166,7 @@ export default function GamePage() {
           </motion.div>
         )}
 
-        {currentState.phase === "playing" && (
+        {(currentState.phase === "playing" || currentState.phase === "paused") && (
           <motion.div
             key="playing"
             initial={{ opacity: 0 }}

@@ -4,6 +4,7 @@ import {
   generateGameCode,
   processRound,
   INITIAL_POPULATION,
+  ROUND_DURATION,
 } from "./gameLogic";
 import { getShuffledScenarioIds, getScenarioById } from "./scenarios";
 
@@ -36,7 +37,10 @@ function broadcastUpdate(code: string, update: GameUpdate) {
   }
 }
 
-export function createGame(hostName: string): { code: string; hostId: string } {
+export function createGame(
+  hostName: string,
+  totalRounds: number = 10
+): { code: string; hostId: string } {
   let code = generateGameCode();
   // Ensure unique code
   while (games.has(code)) {
@@ -44,7 +48,7 @@ export function createGame(hostName: string): { code: string; hostId: string } {
   }
 
   const hostId = `host_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const gameState = createInitialGameState(code, hostId, hostName);
+  const gameState = createInitialGameState(code, hostId, hostName, totalRounds);
   games.set(code, gameState);
   playerChoices.set(code, new Map());
 
@@ -126,11 +130,56 @@ export function startGame(code: string, hostId: string): GameState | null {
   game.scenarioOrder = getShuffledScenarioIds().slice(0, game.totalRounds);
   game.currentScenario = getScenarioById(game.scenarioOrder[0]) || null;
   game.roundStartTime = Date.now();
+  game.pausedTimeRemaining = null;
 
   broadcastUpdate(code, {
     type: "game_started",
     gameState: game,
     message: "Game started!",
+  });
+
+  return game;
+}
+
+export function pauseRound(code: string, hostId: string): GameState | null {
+  const game = games.get(code);
+  if (!game || game.hostId !== hostId || game.phase !== "playing") {
+    return null;
+  }
+
+  // Calculate remaining time
+  const elapsed = Math.floor((Date.now() - game.roundStartTime!) / 1000);
+  const remaining = Math.max(0, game.roundDuration - elapsed);
+
+  game.phase = "paused";
+  game.pausedTimeRemaining = remaining;
+  game.roundStartTime = null;
+
+  broadcastUpdate(code, {
+    type: "round_paused",
+    gameState: game,
+    message: "Round paused",
+  });
+
+  return game;
+}
+
+export function resumeRound(code: string, hostId: string): GameState | null {
+  const game = games.get(code);
+  if (!game || game.hostId !== hostId || game.phase !== "paused") {
+    return null;
+  }
+
+  // Calculate new start time based on remaining time
+  const remaining = game.pausedTimeRemaining || ROUND_DURATION;
+  game.roundStartTime = Date.now() - (game.roundDuration - remaining) * 1000;
+  game.pausedTimeRemaining = null;
+  game.phase = "playing";
+
+  broadcastUpdate(code, {
+    type: "round_resumed",
+    gameState: game,
+    message: "Round resumed",
   });
 
   return game;
@@ -142,7 +191,8 @@ export function makeChoice(
   choice: "safe" | "risky"
 ): GameState | null {
   const game = games.get(code);
-  if (!game || game.phase !== "playing") {
+  // Allow choices during playing or paused phases
+  if (!game || (game.phase !== "playing" && game.phase !== "paused")) {
     return null;
   }
 
@@ -166,7 +216,8 @@ export function makeChoice(
 
 export function endRound(code: string, hostId: string): GameState | null {
   const game = games.get(code);
-  if (!game || game.hostId !== hostId || game.phase !== "playing") {
+  // Allow ending round from playing or paused
+  if (!game || game.hostId !== hostId || (game.phase !== "playing" && game.phase !== "paused")) {
     return null;
   }
 
@@ -183,6 +234,7 @@ export function endRound(code: string, hostId: string): GameState | null {
   game.players = updatedPlayers;
   game.roundResults.push(roundResult);
   game.phase = "results";
+  game.pausedTimeRemaining = null;
 
   // Clear choices for next round
   choices.clear();
@@ -218,6 +270,7 @@ export function nextRound(code: string, hostId: string): GameState | null {
   game.currentScenario =
     getScenarioById(game.scenarioOrder[game.currentRound - 1]) || null;
   game.roundStartTime = Date.now();
+  game.pausedTimeRemaining = null;
   game.phase = "playing";
 
   broadcastUpdate(code, {

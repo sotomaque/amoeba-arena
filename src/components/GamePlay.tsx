@@ -22,6 +22,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
 
   const currentPlayer = gameState.players.find((p) => p.id === playerId);
   const scenario = gameState.currentScenario;
+  const isPaused = gameState.phase === "paused";
 
   const makeChoice = trpc.game.choose.useMutation({
     onSuccess: (data) => {
@@ -34,6 +35,24 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
   });
 
   const endRound = trpc.game.endRound.useMutation({
+    onSuccess: (data) => {
+      onGameUpdate(data);
+    },
+    onError: (error) => {
+      alert(error.message);
+    },
+  });
+
+  const pauseRound = trpc.game.pause.useMutation({
+    onSuccess: (data) => {
+      onGameUpdate(data);
+    },
+    onError: (error) => {
+      alert(error.message);
+    },
+  });
+
+  const resumeRound = trpc.game.resume.useMutation({
     onSuccess: (data) => {
       onGameUpdate(data);
     },
@@ -56,10 +75,18 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
   };
 
   const handleEndRound = useCallback(() => {
-    if (isHost) {
+    if (isHost && !isPaused) {
       endRound.mutate({ code: gameState.code, hostId: playerId });
     }
-  }, [isHost, gameState.code, playerId, endRound]);
+  }, [isHost, isPaused, gameState.code, playerId, endRound]);
+
+  const handlePause = () => {
+    pauseRound.mutate({ code: gameState.code, hostId: playerId });
+  };
+
+  const handleResume = () => {
+    resumeRound.mutate({ code: gameState.code, hostId: playerId });
+  };
 
   const playersChosen = gameState.players.filter(
     (p) => !p.isHost && !p.isEliminated && p.hasChosen
@@ -88,18 +115,18 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
       {/* Timer */}
-      {gameState.roundStartTime && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Timer
-            startTime={gameState.roundStartTime}
-            duration={gameState.roundDuration}
-            onExpire={handleEndRound}
-          />
-        </motion.div>
-      )}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <Timer
+          startTime={gameState.roundStartTime}
+          duration={gameState.roundDuration}
+          pausedTimeRemaining={gameState.pausedTimeRemaining}
+          isPaused={isPaused}
+          onExpire={handleEndRound}
+        />
+      </motion.div>
 
       {/* Scenario */}
       <motion.div
@@ -113,6 +140,27 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
           totalRounds={gameState.totalRounds}
         />
       </motion.div>
+
+      {/* Paused Overlay for Players */}
+      {isPaused && !isHost && (
+        <motion.div
+          className="ghibli-card p-6 text-center bg-sunset/10 border-sunset/30"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <motion.div
+            className="text-4xl mb-3"
+            animate={{ scale: [1, 1.1, 1] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          >
+            ⏸️
+          </motion.div>
+          <h3 className="text-xl font-semibold text-sunset mb-2">Game Paused</h3>
+          <p className="text-muted-foreground">
+            The host has paused the game. Please wait for them to resume.
+          </p>
+        </motion.div>
+      )}
 
       {/* Player Population */}
       {currentPlayer && !isHost && (
@@ -155,7 +203,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
       )}
 
       {/* Choice Buttons */}
-      {!isHost && !isEliminated && (
+      {!isHost && !isEliminated && !isPaused && (
         <div className="grid md:grid-cols-2 gap-6">
           <AnimatePresence>
             {/* Safe Choice */}
@@ -230,7 +278,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
       )}
 
       {/* Submit Button */}
-      {!isHost && !isEliminated && !alreadyChosen && selectedChoice && (
+      {!isHost && !isEliminated && !alreadyChosen && selectedChoice && !isPaused && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -255,7 +303,7 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
       )}
 
       {/* Waiting State */}
-      {!isHost && alreadyChosen && (
+      {!isHost && alreadyChosen && !isPaused && (
         <motion.div
           className="ghibli-card p-6 text-center"
           initial={{ opacity: 0, scale: 0.95 }}
@@ -296,15 +344,38 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
               transition={{ duration: 0.5 }}
             />
           </div>
-          <Button
-            onClick={handleEndRound}
-            disabled={endRound.isPending}
-            className="w-full h-12 rounded-xl ghibli-button bg-pond hover:bg-pond/90"
-          >
-            {endRound.isPending ? "Processing..." : "End Round Now"}
-          </Button>
+
+          {/* Host Control Buttons */}
+          <div className="flex gap-3">
+            {isPaused ? (
+              <Button
+                onClick={handleResume}
+                disabled={resumeRound.isPending}
+                className="flex-1 h-12 rounded-xl ghibli-button bg-forest hover:bg-forest-dark"
+              >
+                {resumeRound.isPending ? "Resuming..." : "▶️ Resume Round"}
+              </Button>
+            ) : (
+              <Button
+                onClick={handlePause}
+                disabled={pauseRound.isPending}
+                className="flex-1 h-12 rounded-xl ghibli-button bg-sunset hover:bg-sunset/90"
+              >
+                {pauseRound.isPending ? "Pausing..." : "⏸️ Pause Round"}
+              </Button>
+            )}
+            <Button
+              onClick={() => endRound.mutate({ code: gameState.code, hostId: playerId })}
+              disabled={endRound.isPending}
+              className="flex-1 h-12 rounded-xl ghibli-button bg-pond hover:bg-pond/90"
+            >
+              {endRound.isPending ? "Processing..." : "⏭️ End Round Now"}
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground mt-3 text-center">
-            Players who haven&apos;t chosen will default to SAFE
+            {isPaused
+              ? "Game is paused. Players can still make choices."
+              : "Players who haven't chosen will default to SAFE"}
           </p>
         </motion.div>
       )}

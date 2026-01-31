@@ -1,7 +1,6 @@
-import { createServer } from "http";
-import { parse } from "url";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { parse } from "node:url";
 import next from "next";
-import { WebSocketServer, WebSocket } from "ws";
 import { subscribeToGame, getGame } from "./src/lib/gameStore";
 import type { GameUpdate } from "./src/lib/types";
 
@@ -12,78 +11,118 @@ const port = parseInt(process.env.PORT || "3000", 10);
 const app = next({ dev, hostname, port, turbopack: dev });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
-  const server = createServer((req, res) => {
-    const parsedUrl = parse(req.url!, true);
-    handle(req, res, parsedUrl);
-  });
+interface WebSocketData {
+  gameCode: string;
+  unsubscribe?: () => void;
+}
 
-  const wss = new WebSocketServer({ noServer: true });
+// Track connections per game using Bun's ServerWebSocket
+const gameConnections = new Map<string, Set<any>>();
 
-  // Track connections per game
-  const gameConnections = new Map<string, Set<WebSocket>>();
+await app.prepare();
 
-  server.on("upgrade", (request, socket, head) => {
-    const { pathname, query } = parse(request.url!, true);
+// Create Node.js HTTP server for Next.js
+const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  try {
+    const parsedUrl = parse(req.url || "", true);
+    await handle(req, res, parsedUrl);
+  } catch (err) {
+    console.error("Error handling request:", err);
+    res.statusCode = 500;
+    res.end("Internal Server Error");
+  }
+});
 
-    if (pathname === "/ws") {
-      const gameCode = query.code as string;
+httpServer.listen(port, hostname, () => {
+  console.log(`> Next.js ready on http://${hostname}:${port}`);
+});
+
+// Separate Bun server for WebSocket on a different port
+const wsPort = port + 1;
+
+const wsServer = Bun.serve<WebSocketData>({
+  port: wsPort,
+  hostname,
+
+  fetch(req, server) {
+    const url = new URL(req.url);
+
+    if (url.pathname === "/ws") {
+      const gameCode = url.searchParams.get("code");
 
       if (!gameCode) {
-        socket.destroy();
-        return;
+        return new Response("Missing game code", { status: 400 });
       }
 
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        // Add connection to game
-        if (!gameConnections.has(gameCode)) {
-          gameConnections.set(gameCode, new Set());
-        }
-        gameConnections.get(gameCode)!.add(ws);
-
-        // Send current game state
-        const gameState = getGame(gameCode);
-        if (gameState) {
-          ws.send(
-            JSON.stringify({
-              type: "connected",
-              gameState,
-            } as GameUpdate)
-          );
-        }
-
-        // Subscribe to game updates
-        const unsubscribe = subscribeToGame(gameCode, (update: GameUpdate) => {
-          const connections = gameConnections.get(gameCode);
-          if (connections) {
-            connections.forEach((client) => {
-              if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(update));
-              }
-            });
-          }
-        });
-
-        ws.on("close", () => {
-          const connections = gameConnections.get(gameCode);
-          if (connections) {
-            connections.delete(ws);
-            if (connections.size === 0) {
-              gameConnections.delete(gameCode);
-            }
-          }
-          unsubscribe();
-        });
-
-        ws.on("error", console.error);
+      const upgraded = server.upgrade(req, {
+        data: { gameCode },
       });
-    } else {
-      socket.destroy();
-    }
-  });
 
-  server.listen(port, () => {
-    console.log(`> Ready on http://${hostname}:${port}`);
-    console.log(`> WebSocket server ready`);
-  });
+      if (upgraded) {
+        return undefined;
+      }
+
+      return new Response("WebSocket upgrade failed", { status: 500 });
+    }
+
+    return new Response("WebSocket server - connect to /ws", { status: 200 });
+  },
+
+  websocket: {
+    open(ws) {
+      const { gameCode } = ws.data;
+
+      // Add connection to game
+      if (!gameConnections.has(gameCode)) {
+        gameConnections.set(gameCode, new Set());
+      }
+      gameConnections.get(gameCode)!.add(ws);
+
+      // Send current game state
+      const gameState = getGame(gameCode);
+      if (gameState) {
+        ws.send(
+          JSON.stringify({
+            type: "connected",
+            gameState,
+          } as GameUpdate)
+        );
+      }
+
+      // Subscribe to game updates
+      const unsubscribe = subscribeToGame(gameCode, (update: GameUpdate) => {
+        const connections = gameConnections.get(gameCode);
+        if (connections) {
+          const message = JSON.stringify(update);
+          connections.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(message);
+            }
+          });
+        }
+      });
+
+      ws.data.unsubscribe = unsubscribe;
+    },
+
+    message(ws, message) {
+      console.log("WebSocket message:", message);
+    },
+
+    close(ws) {
+      const { gameCode, unsubscribe } = ws.data;
+
+      const connections = gameConnections.get(gameCode);
+      if (connections) {
+        connections.delete(ws);
+        if (connections.size === 0) {
+          gameConnections.delete(gameCode);
+        }
+      }
+
+      unsubscribe?.();
+    },
+  },
 });
+
+console.log(`> WebSocket server ready on ws://${hostname}:${wsPort}`);

@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import type { GameState } from "@/lib/types";
 import { Leaderboard } from "./Leaderboard";
@@ -17,8 +19,84 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
   const playerRank = leaderboard.findIndex((l) => l.player.id === playerId) + 1;
   const isWinner = playerId === winner?.player.id;
 
+  const fireConfetti = useCallback(() => {
+    // Nature-themed confetti colors
+    const colors = ["#4a7c59", "#87b5c9", "#a8c686", "#e8a87c", "#6b9b7a"];
+
+    // Fire confetti from both sides
+    const fireFromSide = (originX: number) => {
+      confetti({
+        particleCount: 50,
+        angle: originX < 0.5 ? 60 : 120,
+        spread: 55,
+        origin: { x: originX, y: 0.7 },
+        colors,
+        shapes: ["circle", "square"],
+        gravity: 0.8,
+        scalar: 1.2,
+        drift: originX < 0.5 ? 1 : -1,
+      });
+    };
+
+    // Initial burst
+    fireFromSide(0.1);
+    fireFromSide(0.9);
+
+    // Delayed bursts
+    setTimeout(() => {
+      fireFromSide(0.2);
+      fireFromSide(0.8);
+    }, 250);
+
+    setTimeout(() => {
+      fireFromSide(0.15);
+      fireFromSide(0.85);
+    }, 500);
+
+    // Center celebration
+    setTimeout(() => {
+      confetti({
+        particleCount: 100,
+        spread: 100,
+        origin: { x: 0.5, y: 0.6 },
+        colors,
+        shapes: ["circle"],
+        gravity: 0.6,
+        scalar: 1.5,
+      });
+    }, 750);
+
+    // Continuous gentle confetti
+    const interval = setInterval(() => {
+      confetti({
+        particleCount: 10,
+        angle: 60 + Math.random() * 60,
+        spread: 45,
+        origin: { x: Math.random(), y: -0.1 },
+        colors,
+        shapes: ["circle"],
+        gravity: 1.2,
+        scalar: 0.8,
+        drift: Math.random() * 2 - 1,
+      });
+    }, 400);
+
+    // Stop continuous confetti after 5 seconds
+    setTimeout(() => clearInterval(interval), 5000);
+  }, []);
+
+  useEffect(() => {
+    // Fire confetti when component mounts
+    const timer = setTimeout(fireConfetti, 500);
+    return () => clearTimeout(timer);
+  }, [fireConfetti]);
+
   const handlePlayAgain = () => {
     window.location.href = "/";
+  };
+
+  const handleFireMoreConfetti = () => {
+    fireConfetti();
   };
 
   return (
@@ -113,6 +191,17 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
               </motion.div>
             </motion.div>
           )}
+
+          {/* Confetti button */}
+          <motion.button
+            onClick={handleFireMoreConfetti}
+            className="mt-4 text-2xl hover:scale-110 transition-transform"
+            whileHover={{ rotate: [0, -10, 10, 0] }}
+            transition={{ duration: 0.3 }}
+            title="Fire more confetti!"
+          >
+            🎉
+          </motion.button>
         </motion.div>
       </motion.div>
 
