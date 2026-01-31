@@ -1,7 +1,7 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import type { GameState } from "@/lib/types";
 import { Leaderboard } from "./Leaderboard";
 import { getLeaderboard } from "@/lib/gameLogic";
@@ -15,77 +15,211 @@ export function FinalResults({ gameState, playerId }: FinalResultsProps) {
   const leaderboard = getLeaderboard(gameState.players);
   const winner = leaderboard[0];
   const playerRank = leaderboard.findIndex((l) => l.player.id === playerId) + 1;
+  const isWinner = playerId === winner?.player.id;
 
   const handlePlayAgain = () => {
     window.location.href = "/";
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      <Card className="text-center">
-        <CardHeader>
-          <CardTitle className="text-4xl">Game Over!</CardTitle>
-        </CardHeader>
-        <CardContent>
+    <div className="w-full max-w-4xl mx-auto space-y-8">
+      {/* Winner Announcement */}
+      <motion.div
+        className="ghibli-card p-8 text-center overflow-hidden relative"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, type: "spring" }}
+      >
+        {/* Floating celebration elements */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {[...Array(8)].map((_, i) => (
+            <motion.span
+              key={i}
+              className="absolute text-2xl"
+              style={{
+                left: `${10 + i * 12}%`,
+                top: "20%",
+              }}
+              animate={{
+                y: [0, -30, 0],
+                opacity: [0.3, 0.7, 0.3],
+                rotate: [0, 10, -10, 0],
+              }}
+              transition={{
+                duration: 3 + i * 0.5,
+                repeat: Infinity,
+                delay: i * 0.3,
+              }}
+            >
+              {["🌸", "🍃", "✨", "🌿", "💫", "🌊", "🦠", "🌱"][i]}
+            </motion.span>
+          ))}
+        </div>
+
+        <motion.div
+          className="relative z-10"
+          initial={{ y: 20 }}
+          animate={{ y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <motion.div
+            className="text-8xl mb-6"
+            animate={{
+              scale: [1, 1.1, 1],
+              rotate: [0, 5, -5, 0],
+            }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            🏆
+          </motion.div>
+
+          <motion.h1
+            className="text-4xl md:text-5xl font-bold gradient-text-nature mb-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            Game Complete!
+          </motion.h1>
+
           {winner && (
-            <div className="py-8">
-              <div className="text-6xl mb-4">🏆</div>
-              <h2 className="text-3xl font-bold mb-2">{winner.player.name} Wins!</h2>
-              <p className="text-xl text-muted-foreground">
-                Final population:{" "}
-                <span className="font-bold text-primary">
-                  {winner.player.population.toLocaleString()}
-                </span>{" "}
-                amoebas
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <p className="text-xl text-muted-foreground mb-4">
+                The pond has a new champion!
               </p>
-            </div>
+              <motion.div
+                className="inline-block px-8 py-4 bg-gradient-to-r from-forest/10 to-meadow/10 rounded-2xl border-2 border-forest/30"
+                whileHover={{ scale: 1.02 }}
+              >
+                <h2 className="text-3xl md:text-4xl font-bold text-forest mb-2">
+                  {winner.player.name}
+                </h2>
+                <div className="flex items-center justify-center gap-2 text-xl text-muted-foreground">
+                  <motion.span
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    🦠
+                  </motion.span>
+                  <span className="font-bold text-forest font-mono">
+                    {winner.player.population.toLocaleString()}
+                  </span>
+                  <span>amoebas</span>
+                </div>
+              </motion.div>
+            </motion.div>
           )}
+        </motion.div>
+      </motion.div>
 
-          {playerRank > 0 && playerId !== winner?.player.id && (
-            <div className="p-4 bg-muted rounded-lg mb-6">
-              <p className="text-lg">
-                You finished in <span className="font-bold">#{playerRank}</span> place!
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Leaderboard players={gameState.players} currentPlayerId={playerId} />
-
-      <Card>
-        <CardContent className="pt-6">
-          <h3 className="font-semibold mb-4">Game Statistics</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold">{gameState.totalRounds}</div>
-              <div className="text-sm text-muted-foreground">Rounds Played</div>
-            </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold">{gameState.players.length}</div>
-              <div className="text-sm text-muted-foreground">Total Players</div>
-            </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold">
-                {gameState.players.filter((p) => !p.isEliminated && !p.isHost).length}
-              </div>
-              <div className="text-sm text-muted-foreground">Survivors</div>
-            </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold">
-                {Math.max(...gameState.players.map((p) => p.population)).toLocaleString()}
-              </div>
-              <div className="text-sm text-muted-foreground">Highest Population</div>
-            </div>
+      {/* Player's Final Rank (if not winner) */}
+      {playerRank > 0 && !isWinner && (
+        <motion.div
+          className="ghibli-card p-6 text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <div className="flex items-center justify-center gap-3">
+            <span className="text-3xl">
+              {playerRank === 2 ? "🥈" : playerRank === 3 ? "🥉" : "🌟"}
+            </span>
+            <p className="text-xl">
+              You finished in <span className="font-bold text-forest">#{playerRank}</span> place!
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <p className="text-muted-foreground mt-2">
+            {playerRank <= 3 ? "Great job! You made it to the podium!" : "Keep practicing those survival skills!"}
+          </p>
+        </motion.div>
+      )}
 
-      <div className="text-center">
-        <Button onClick={handlePlayAgain} size="lg" className="text-lg px-8">
-          Play Again
+      {/* Full Leaderboard */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+      >
+        <Leaderboard players={gameState.players} currentPlayerId={playerId} />
+      </motion.div>
+
+      {/* Game Statistics */}
+      <motion.div
+        className="ghibli-card p-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7 }}
+      >
+        <h3 className="font-semibold mb-6 flex items-center gap-2 text-lg">
+          <span>📊</span> Game Statistics
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Rounds Played", value: gameState.totalRounds, icon: "🎯" },
+            { label: "Total Players", value: gameState.players.filter(p => !p.isHost).length, icon: "👥" },
+            { label: "Survivors", value: gameState.players.filter(p => !p.isEliminated && !p.isHost).length, icon: "🌿" },
+            { label: "Highest Population", value: Math.max(...gameState.players.map(p => p.population)).toLocaleString(), icon: "📈" },
+          ].map((stat, index) => (
+            <motion.div
+              key={stat.label}
+              className="text-center p-4 bg-muted/50 rounded-xl"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 + index * 0.1 }}
+            >
+              <motion.div
+                className="text-2xl mb-2"
+                animate={{ y: [0, -3, 0] }}
+                transition={{ duration: 2, repeat: Infinity, delay: index * 0.2 }}
+              >
+                {stat.icon}
+              </motion.div>
+              <div className="text-2xl font-bold text-forest">{stat.value}</div>
+              <div className="text-xs text-muted-foreground">{stat.label}</div>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Play Again Button */}
+      <motion.div
+        className="text-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.9 }}
+      >
+        <Button
+          onClick={handlePlayAgain}
+          className="h-14 px-12 text-xl font-semibold rounded-2xl ghibli-button bg-forest hover:bg-forest-dark"
+        >
+          <span className="flex items-center gap-3">
+            <span>🌱</span> Play Again <span>🌱</span>
+          </span>
         </Button>
-      </div>
+      </motion.div>
+
+      {/* Footer decoration */}
+      <motion.div
+        className="flex justify-center gap-4 pt-8 opacity-30"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.3 }}
+        transition={{ delay: 1 }}
+      >
+        {["🌿", "🌸", "🦠", "💧", "🍃"].map((emoji, i) => (
+          <motion.span
+            key={i}
+            className="text-2xl"
+            animate={{ y: [0, -5, 0] }}
+            transition={{ duration: 2, repeat: Infinity, delay: i * 0.2 }}
+          >
+            {emoji}
+          </motion.span>
+        ))}
+      </motion.div>
     </div>
   );
 }

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import type { GameState } from "@/lib/types";
 import { ScenarioCard } from "./ScenarioCard";
 import { Timer } from "./Timer";
@@ -70,7 +69,17 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
   ).length;
 
   if (!scenario) {
-    return <div>Loading scenario...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="text-4xl"
+        >
+          🌀
+        </motion.div>
+      </div>
+    );
   }
 
   const isEliminated = currentPlayer?.isEliminated;
@@ -80,140 +89,234 @@ export function GamePlay({ gameState, playerId, isHost, onGameUpdate }: GamePlay
     <div className="w-full max-w-4xl mx-auto space-y-6">
       {/* Timer */}
       {gameState.roundStartTime && (
-        <Timer
-          startTime={gameState.roundStartTime}
-          duration={gameState.roundDuration}
-          onExpire={handleEndRound}
-        />
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Timer
+            startTime={gameState.roundStartTime}
+            duration={gameState.roundDuration}
+            onExpire={handleEndRound}
+          />
+        </motion.div>
       )}
 
       {/* Scenario */}
-      <ScenarioCard
-        scenario={scenario}
-        roundNumber={gameState.currentRound}
-        totalRounds={gameState.totalRounds}
-      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <ScenarioCard
+          scenario={scenario}
+          roundNumber={gameState.currentRound}
+          totalRounds={gameState.totalRounds}
+        />
+      </motion.div>
 
       {/* Player Population */}
       {currentPlayer && !isHost && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Your Population:</span>
-              <span className="text-3xl font-bold text-primary">
-                {currentPlayer.population.toLocaleString()}
-              </span>
+        <motion.div
+          className="ghibli-card p-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <motion.span
+                className="text-3xl"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                🦠
+              </motion.span>
+              <span className="text-lg text-muted-foreground">Your Colony:</span>
             </div>
-            {isEliminated && (
-              <Badge variant="destructive" className="mt-2">
-                You&apos;ve been eliminated!
-              </Badge>
-            )}
-          </CardContent>
-        </Card>
+            <motion.span
+              className="text-4xl font-bold text-forest"
+              key={currentPlayer.population}
+              initial={{ scale: 1.2 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200 }}
+            >
+              {currentPlayer.population.toLocaleString()}
+            </motion.span>
+          </div>
+          {isEliminated && (
+            <motion.div
+              className="mt-4 p-3 bg-destructive/10 rounded-xl text-center text-destructive"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              Your colony has perished! 🥀
+            </motion.div>
+          )}
+        </motion.div>
       )}
 
       {/* Choice Buttons */}
       {!isHost && !isEliminated && (
-        <div className="grid md:grid-cols-2 gap-4">
-          <Card
-            className={`cursor-pointer transition-all ${
-              selectedChoice === "safe"
-                ? "ring-4 ring-green-500"
-                : "hover:shadow-lg"
-            } ${alreadyChosen ? "opacity-50 pointer-events-none" : ""}`}
-            onClick={() => !alreadyChosen && handleChoice("safe")}
-          >
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <Badge variant="secondary" className="mb-3 bg-green-100 text-green-800">
-                  SAFE
-                </Badge>
-                <p className="text-lg mb-3">{scenario.choices.safe.label}</p>
-                <div className="text-sm text-muted-foreground">
-                  <span className="block">Risk: {Math.round(scenario.choices.safe.risk * 100)}%</span>
-                  <span className="block">
-                    Reward: ×{scenario.choices.safe.multiplier}
-                  </span>
-                </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          <AnimatePresence>
+            {/* Safe Choice */}
+            <motion.button
+              className={`p-6 rounded-2xl text-left transition-all choice-safe ${
+                selectedChoice === "safe" ? "selected" : ""
+              } ${alreadyChosen ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              onClick={() => !alreadyChosen && handleChoice("safe")}
+              disabled={alreadyChosen}
+              whileHover={!alreadyChosen ? { y: -4 } : {}}
+              whileTap={!alreadyChosen ? { scale: 0.98 } : {}}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <motion.span
+                  className="text-3xl"
+                  animate={selectedChoice === "safe" ? { scale: [1, 1.2, 1] } : {}}
+                  transition={{ duration: 0.3 }}
+                >
+                  🌿
+                </motion.span>
+                <span className="text-xl font-semibold text-forest">SAFE</span>
               </div>
-            </CardContent>
-          </Card>
+              <p className="text-muted-foreground mb-4">{scenario.choices.safe.label}</p>
+              <div className="flex gap-4 text-sm">
+                <span className="px-3 py-1 bg-forest/10 text-forest rounded-full">
+                  Risk: {Math.round(scenario.choices.safe.risk * 100)}%
+                </span>
+                <span className="px-3 py-1 bg-meadow/20 text-forest-dark rounded-full">
+                  Reward: ×{scenario.choices.safe.multiplier}
+                </span>
+              </div>
+            </motion.button>
 
-          <Card
-            className={`cursor-pointer transition-all ${
-              selectedChoice === "risky"
-                ? "ring-4 ring-red-500"
-                : "hover:shadow-lg"
-            } ${alreadyChosen ? "opacity-50 pointer-events-none" : ""}`}
-            onClick={() => !alreadyChosen && handleChoice("risky")}
-          >
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <Badge variant="secondary" className="mb-3 bg-red-100 text-red-800">
-                  RISKY
-                </Badge>
-                <p className="text-lg mb-3">{scenario.choices.risky.label}</p>
-                <div className="text-sm text-muted-foreground">
-                  <span className="block">
-                    Risk: {Math.round(scenario.choices.risky.risk * 100)}%
-                  </span>
-                  <span className="block">
-                    Reward: ×{scenario.choices.risky.multiplier}
-                  </span>
-                </div>
+            {/* Risky Choice */}
+            <motion.button
+              className={`p-6 rounded-2xl text-left transition-all choice-risky ${
+                selectedChoice === "risky" ? "selected" : ""
+              } ${alreadyChosen ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              onClick={() => !alreadyChosen && handleChoice("risky")}
+              disabled={alreadyChosen}
+              whileHover={!alreadyChosen ? { y: -4 } : {}}
+              whileTap={!alreadyChosen ? { scale: 0.98 } : {}}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <motion.span
+                  className="text-3xl"
+                  animate={selectedChoice === "risky" ? { scale: [1, 1.2, 1] } : {}}
+                  transition={{ duration: 0.3 }}
+                >
+                  🔥
+                </motion.span>
+                <span className="text-xl font-semibold text-sunset">RISKY</span>
               </div>
-            </CardContent>
-          </Card>
+              <p className="text-muted-foreground mb-4">{scenario.choices.risky.label}</p>
+              <div className="flex gap-4 text-sm">
+                <span className="px-3 py-1 bg-sunset/10 text-sunset rounded-full">
+                  Risk: {Math.round(scenario.choices.risky.risk * 100)}%
+                </span>
+                <span className="px-3 py-1 bg-sunset/20 text-orange-700 dark:text-orange-300 rounded-full">
+                  Reward: ×{scenario.choices.risky.multiplier}
+                </span>
+              </div>
+            </motion.button>
+          </AnimatePresence>
         </div>
       )}
 
       {/* Submit Button */}
       {!isHost && !isEliminated && !alreadyChosen && selectedChoice && (
-        <Button
-          onClick={handleSubmit}
-          disabled={makeChoice.isPending}
-          className="w-full text-lg py-6"
-          size="lg"
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
         >
-          {makeChoice.isPending ? "Submitting..." : "Lock In Choice"}
-        </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={makeChoice.isPending}
+            className="w-full h-14 text-xl font-semibold rounded-2xl ghibli-button bg-forest hover:bg-forest-dark"
+          >
+            {makeChoice.isPending ? (
+              <motion.span animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 1, repeat: Infinity }}>
+                Submitting...
+              </motion.span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span>✨</span> Lock In Choice <span>✨</span>
+              </span>
+            )}
+          </Button>
+        </motion.div>
       )}
 
       {/* Waiting State */}
       {!isHost && alreadyChosen && (
-        <div className="text-center p-6 bg-muted rounded-lg">
-          <span className="text-lg">✓ Choice submitted! Waiting for other players...</span>
-        </div>
+        <motion.div
+          className="ghibli-card p-6 text-center"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <motion.div
+            className="text-4xl mb-3"
+            animate={{ y: [0, -5, 0] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            ✨
+          </motion.div>
+          <p className="text-lg text-forest font-medium">Choice submitted!</p>
+          <p className="text-muted-foreground">Waiting for other players...</p>
+        </motion.div>
       )}
 
       {/* Host View */}
       {isHost && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-lg font-semibold">Players answered:</span>
-              <Badge variant="secondary" className="text-lg px-4 py-1">
-                {playersChosen} / {totalActivePlayers}
-              </Badge>
-            </div>
-            <Button
-              onClick={handleEndRound}
-              disabled={endRound.isPending}
-              className="w-full"
-              size="lg"
-            >
-              {endRound.isPending ? "Processing..." : "End Round Now"}
-            </Button>
-            <p className="text-sm text-muted-foreground mt-2 text-center">
-              Players who haven&apos;t chosen will default to SAFE
-            </p>
-          </CardContent>
-        </Card>
+        <motion.div
+          className="ghibli-card p-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-lg font-semibold flex items-center gap-2">
+              <span>📊</span> Players answered:
+            </span>
+            <span className="text-2xl font-bold text-forest">
+              {playersChosen} / {totalActivePlayers}
+            </span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-3 mb-4 overflow-hidden">
+            <motion.div
+              className="h-full bg-gradient-to-r from-forest to-meadow rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${(playersChosen / totalActivePlayers) * 100}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+          <Button
+            onClick={handleEndRound}
+            disabled={endRound.isPending}
+            className="w-full h-12 rounded-xl ghibli-button bg-pond hover:bg-pond/90"
+          >
+            {endRound.isPending ? "Processing..." : "End Round Now"}
+          </Button>
+          <p className="text-sm text-muted-foreground mt-3 text-center">
+            Players who haven&apos;t chosen will default to SAFE
+          </p>
+        </motion.div>
       )}
 
       {/* Mini Leaderboard */}
-      <Leaderboard players={gameState.players} currentPlayerId={playerId} compact />
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <Leaderboard players={gameState.players} currentPlayerId={playerId} compact />
+      </motion.div>
     </div>
   );
 }

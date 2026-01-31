@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Progress } from "@/components/ui/progress";
+import { motion } from "framer-motion";
 
 interface TimerProps {
   startTime: number;
-  duration: number; // in seconds
+  duration: number;
   onExpire?: () => void;
 }
 
@@ -33,21 +33,63 @@ export function Timer({ startTime, duration, onExpire }: TimerProps) {
 
   const progress = (timeLeft / duration) * 100;
   const isLow = timeLeft <= 10;
+  const isCritical = timeLeft <= 5;
 
   return (
-    <div className="w-full max-w-xs mx-auto">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-sm font-medium">Time Remaining</span>
-        <span
-          className={`text-2xl font-bold ${isLow ? "text-red-500 animate-pulse" : ""}`}
+    <motion.div
+      className="ghibli-card p-4"
+      animate={isCritical ? { scale: [1, 1.02, 1] } : {}}
+      transition={{ duration: 0.5, repeat: isCritical ? Infinity : 0 }}
+    >
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <motion.span
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+          >
+            ⏰
+          </motion.span>
+          Time Remaining
+        </span>
+        <motion.span
+          className={`text-3xl font-bold font-mono ${
+            isCritical
+              ? "text-destructive"
+              : isLow
+                ? "text-sunset"
+                : "text-forest"
+          }`}
+          animate={isLow ? { scale: [1, 1.1, 1] } : {}}
+          transition={{ duration: 0.5, repeat: isLow ? Infinity : 0 }}
         >
           {timeLeft}s
-        </span>
+        </motion.span>
       </div>
-      <Progress
-        value={progress}
-        className={`h-3 ${isLow ? "[&>div]:bg-red-500" : ""}`}
-      />
-    </div>
+
+      <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full transition-colors duration-300 ${
+            isCritical
+              ? "bg-gradient-to-r from-destructive to-red-400"
+              : isLow
+                ? "bg-gradient-to-r from-sunset to-yellow-400"
+                : "bg-gradient-to-r from-forest to-meadow"
+          }`}
+          initial={{ width: "100%" }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.3 }}
+        />
+      </div>
+
+      {isLow && (
+        <motion.p
+          className="text-center text-sm mt-2 text-muted-foreground"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          {isCritical ? "⚡ Hurry up!" : "🍃 Time is running out..."}
+        </motion.p>
+      )}
+    </motion.div>
   );
 }
