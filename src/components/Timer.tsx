@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
 interface TimerProps {
   startTime: number | null;
@@ -14,6 +14,7 @@ interface TimerProps {
 export function Timer({ startTime, duration, pausedTimeRemaining, isPaused, onExpire }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(duration);
   const [hasExpired, setHasExpired] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (isPaused && pausedTimeRemaining !== null && pausedTimeRemaining !== undefined) {
@@ -44,30 +45,50 @@ export function Timer({ startTime, duration, pausedTimeRemaining, isPaused, onEx
   const isLow = timeLeft <= 10;
   const isCritical = timeLeft <= 5;
 
+  // Animation helpers
+  const criticalPulse = shouldReduceMotion
+    ? {}
+    : isCritical && !isPaused
+      ? { animate: { scale: [1, 1.02, 1] }, transition: { duration: 0.5, repeat: Infinity } }
+      : {};
+
+  const pausePulse = shouldReduceMotion
+    ? {}
+    : { animate: { scale: [1, 1.2, 1] }, transition: { duration: 1, repeat: Infinity } };
+
+  const clockSpin = shouldReduceMotion
+    ? {}
+    : { animate: { rotate: [0, 360] }, transition: { duration: 4, repeat: Infinity, ease: "linear" } };
+
+  const timePulse = shouldReduceMotion
+    ? {}
+    : isLow && !isPaused
+      ? { animate: { scale: [1, 1.1, 1] }, transition: { duration: 0.5, repeat: Infinity } }
+      : {};
+
+  const progressBarAnimation = shouldReduceMotion
+    ? { style: { width: `${progress}%` } }
+    : { initial: { width: "100%" }, animate: { width: `${progress}%` }, transition: { duration: 0.3 } };
+
+  const fadeIn = { initial: { opacity: 0 }, animate: { opacity: 1 } };
+
   return (
     <motion.div
       className={`ghibli-card p-4 ${isPaused ? "ring-2 ring-sunset ring-offset-2" : ""}`}
-      animate={isCritical && !isPaused ? { scale: [1, 1.02, 1] } : {}}
-      transition={{ duration: 0.5, repeat: isCritical && !isPaused ? Infinity : 0 }}
+      {...criticalPulse}
     >
       <div className="flex justify-between items-center mb-3">
         <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
           {isPaused ? (
             <>
-              <motion.span
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-              >
+              <motion.span {...pausePulse}>
                 ⏸️
               </motion.span>
               <span className="text-sunset font-medium">PAUSED</span>
             </>
           ) : (
             <>
-              <motion.span
-                animate={{ rotate: [0, 360] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-              >
+              <motion.span {...clockSpin}>
                 ⏰
               </motion.span>
               Time Remaining
@@ -84,14 +105,20 @@ export function Timer({ startTime, duration, pausedTimeRemaining, isPaused, onEx
                   ? "text-sunset"
                   : "text-forest"
           }`}
-          animate={isLow && !isPaused ? { scale: [1, 1.1, 1] } : {}}
-          transition={{ duration: 0.5, repeat: isLow && !isPaused ? Infinity : 0 }}
+          {...timePulse}
         >
           {timeLeft}s
         </motion.span>
       </div>
 
-      <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
+      <div
+        className="w-full bg-muted rounded-full h-4 overflow-hidden"
+        role="progressbar"
+        aria-valuenow={timeLeft}
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-label={`${timeLeft} seconds remaining`}
+      >
         <motion.div
           className={`h-full rounded-full transition-colors duration-300 ${
             isPaused
@@ -102,17 +129,14 @@ export function Timer({ startTime, duration, pausedTimeRemaining, isPaused, onEx
                   ? "bg-gradient-to-r from-sunset to-yellow-400"
                   : "bg-gradient-to-r from-forest to-meadow"
           }`}
-          initial={{ width: "100%" }}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.3 }}
+          {...progressBarAnimation}
         />
       </div>
 
       {isPaused && (
         <motion.p
           className="text-center text-sm mt-2 text-sunset font-medium"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          {...fadeIn}
         >
           ⏸️ Host has paused the game
         </motion.p>
@@ -121,8 +145,7 @@ export function Timer({ startTime, duration, pausedTimeRemaining, isPaused, onEx
       {isLow && !isPaused && (
         <motion.p
           className="text-center text-sm mt-2 text-muted-foreground"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          {...fadeIn}
         >
           {isCritical ? "⚡ Hurry up!" : "🍃 Time is running out..."}
         </motion.p>

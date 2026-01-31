@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
@@ -17,7 +17,9 @@ export function CreateGameForm() {
   const [hostName, setHostName] = useState("");
   const [totalRounds, setTotalRounds] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
 
   const createGame = trpc.game.create.useMutation({
     onSuccess: (data) => {
@@ -27,30 +29,45 @@ export function CreateGameForm() {
       );
       router.push(`/game/${data.code}`);
     },
-    onError: (error) => {
-      alert(error.message);
+    onError: (err) => {
+      setError(err.message);
       setIsLoading(false);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (!hostName.trim()) return;
     setIsLoading(true);
     createGame.mutate({ hostName: hostName.trim(), totalRounds });
   };
 
+  const motionProps = shouldReduceMotion
+    ? {}
+    : { whileHover: { y: -4 }, transition: { duration: 0.2 } };
+
+  const rotateAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { rotate: [0, 10, -10, 0] }, transition: { duration: 4, repeat: Infinity, ease: "easeInOut" } };
+
+  const buttonMotionProps = shouldReduceMotion
+    ? {}
+    : { whileHover: { y: -1 }, whileTap: { scale: 0.98 } };
+
+  const pulseAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { opacity: [1, 0.5, 1] }, transition: { duration: 1, repeat: Infinity } };
+
   return (
     <motion.div
       className="ghibli-card p-6 w-full"
-      whileHover={{ y: -4 }}
-      transition={{ duration: 0.2 }}
+      {...motionProps}
     >
       <div className="text-center mb-6">
         <motion.div
           className="text-4xl mb-2"
-          animate={{ rotate: [0, 10, -10, 0] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          {...rotateAnimation}
         >
           🏡
         </motion.div>
@@ -59,8 +76,20 @@ export function CreateGameForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div
+            role="alert"
+            className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl text-center"
+          >
+            {error}
+          </div>
+        )}
         <div>
+          <label htmlFor="host-name" className="sr-only">
+            Your name (as host)
+          </label>
           <Input
+            id="host-name"
             type="text"
             placeholder="Your name (as host)"
             value={hostName}
@@ -71,23 +100,24 @@ export function CreateGameForm() {
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-muted-foreground mb-2 text-center">
+        <fieldset>
+          <legend className="block text-sm font-medium text-muted-foreground mb-2 text-center">
             Number of Rounds
-          </label>
-          <div className="flex gap-2">
+          </legend>
+          <div className="flex gap-2" role="radiogroup" aria-label="Number of rounds">
             {ROUND_OPTIONS.map((option) => (
               <motion.button
                 key={option.value}
                 type="button"
+                role="radio"
+                aria-checked={totalRounds === option.value}
                 onClick={() => setTotalRounds(option.value)}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all border-2 ${
                   totalRounds === option.value
                     ? "bg-forest/10 border-forest text-forest"
                     : "border-muted hover:border-forest/30 text-muted-foreground"
                 }`}
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.98 }}
+                {...buttonMotionProps}
                 disabled={isLoading}
               >
                 {option.value}
@@ -97,7 +127,7 @@ export function CreateGameForm() {
           <p className="text-xs text-center text-muted-foreground mt-1">
             {ROUND_OPTIONS.find((o) => o.value === totalRounds)?.label}
           </p>
-        </div>
+        </fieldset>
 
         <Button
           type="submit"
@@ -105,10 +135,7 @@ export function CreateGameForm() {
           disabled={isLoading || !hostName.trim()}
         >
           {isLoading ? (
-            <motion.span
-              animate={{ opacity: [1, 0.5, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
+            <motion.span {...pulseAnimation}>
               Creating pond...
             </motion.span>
           ) : (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
@@ -11,7 +11,9 @@ export function JoinGameForm() {
   const [code, setCode] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
 
   const joinGame = trpc.game.join.useMutation({
     onSuccess: (data) => {
@@ -21,30 +23,41 @@ export function JoinGameForm() {
       );
       router.push(`/game/${data.gameState.code}`);
     },
-    onError: (error) => {
-      alert(error.message);
+    onError: (err) => {
+      setError(err.message);
       setIsLoading(false);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (!code.trim() || !playerName.trim()) return;
     setIsLoading(true);
     joinGame.mutate({ code: code.trim().toUpperCase(), playerName: playerName.trim() });
   };
 
+  const motionProps = shouldReduceMotion
+    ? {}
+    : { whileHover: { y: -4 }, transition: { duration: 0.2 } };
+
+  const floatAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { y: [0, -5, 0] }, transition: { duration: 2, repeat: Infinity, ease: "easeInOut" } };
+
+  const pulseAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { opacity: [1, 0.5, 1] }, transition: { duration: 1, repeat: Infinity } };
+
   return (
     <motion.div
       className="ghibli-card p-6 w-full"
-      whileHover={{ y: -4 }}
-      transition={{ duration: 0.2 }}
+      {...motionProps}
     >
       <div className="text-center mb-6">
         <motion.div
           className="text-4xl mb-2"
-          animate={{ y: [0, -5, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          {...floatAnimation}
         >
           🦠
         </motion.div>
@@ -53,8 +66,20 @@ export function JoinGameForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div
+            role="alert"
+            className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl text-center"
+          >
+            {error}
+          </div>
+        )}
         <div>
+          <label htmlFor="game-code" className="sr-only">
+            Game code
+          </label>
           <Input
+            id="game-code"
             type="text"
             placeholder="Game code"
             value={code}
@@ -62,10 +87,15 @@ export function JoinGameForm() {
             maxLength={6}
             className="h-12 text-center text-2xl tracking-[0.3em] font-mono border-2 border-pond/20 focus:border-pond rounded-xl bg-background/50"
             disabled={isLoading}
+            aria-describedby={error ? "join-error" : undefined}
           />
         </div>
         <div>
+          <label htmlFor="player-name" className="sr-only">
+            Your name
+          </label>
           <Input
+            id="player-name"
             type="text"
             placeholder="Your name"
             value={playerName}
@@ -81,10 +111,7 @@ export function JoinGameForm() {
           disabled={isLoading || !code.trim() || !playerName.trim()}
         >
           {isLoading ? (
-            <motion.span
-              animate={{ opacity: [1, 0.5, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
+            <motion.span {...pulseAnimation}>
               Joining pond...
             </motion.span>
           ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { Player } from "@/lib/types";
 import { getLeaderboard } from "@/lib/gameLogic";
 
@@ -14,13 +14,46 @@ const rankEmojis = ["👑", "🥈", "🥉"];
 
 export function Leaderboard({ players, currentPlayerId, compact = false }: LeaderboardProps) {
   const leaderboard = getLeaderboard(players);
+  const shouldReduceMotion = useReducedMotion();
+
+  const fadeIn = shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0 }, animate: { opacity: 1 } };
+
+  const slideIn = (index: number) => shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0, x: -10 }, animate: { opacity: 1, x: 0 }, transition: { delay: index * 0.05 } };
+
+  const fadeInUp = shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    : { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
+
+  const listItemAnimation = (index: number) => shouldReduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : {
+        initial: { opacity: 0, y: 20 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -20 },
+        transition: { duration: 0.3, delay: index * 0.05 },
+      };
+
+  const crownAnimation = shouldReduceMotion
+    ? {}
+    : { animate: { scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }, transition: { duration: 2, repeat: Infinity } };
+
+  const pulseAnimation = (index: number) => shouldReduceMotion
+    ? {}
+    : { animate: { scale: [1, 1.2, 1] }, transition: { duration: 2, repeat: Infinity, delay: index * 0.2 } };
+
+  const popAnimation = shouldReduceMotion
+    ? {}
+    : { initial: { scale: 1.2 }, animate: { scale: 1 }, transition: { type: "spring", stiffness: 200 } };
 
   if (compact) {
     return (
       <motion.div
         className="ghibli-card p-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        {...fadeIn}
       >
         <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
           <span>🏆</span> Leaderboard
@@ -34,9 +67,7 @@ export function Leaderboard({ players, currentPlayerId, compact = false }: Leade
                   ? "bg-forest/10 border border-forest/20"
                   : "bg-muted/50"
               } ${player.isEliminated ? "opacity-50" : ""}`}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
+              {...slideIn(index)}
             >
               <span className="flex items-center gap-2">
                 <span className="w-6 text-center">
@@ -62,8 +93,7 @@ export function Leaderboard({ players, currentPlayerId, compact = false }: Leade
   return (
     <motion.div
       className="ghibli-card overflow-hidden"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      {...fadeInUp}
     >
       <div className="bg-gradient-to-r from-forest/10 to-meadow/10 px-6 py-4 border-b border-border/50">
         <h3 className="text-xl font-bold flex items-center gap-2 gradient-text-nature">
@@ -76,11 +106,8 @@ export function Leaderboard({ players, currentPlayerId, compact = false }: Leade
           {leaderboard.map(({ rank, player }, index) => (
             <motion.div
               key={player.id}
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
+              layout={!shouldReduceMotion}
+              {...listItemAnimation(index)}
               className={`flex justify-between items-center p-4 rounded-xl transition-all ${
                 rank === 1
                   ? "bg-gradient-to-r from-yellow-100 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-2 border-yellow-300/50"
@@ -96,8 +123,7 @@ export function Leaderboard({ players, currentPlayerId, compact = false }: Leade
               <div className="flex items-center gap-4">
                 <motion.span
                   className="text-3xl w-10 text-center"
-                  animate={rank === 1 ? { scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] } : {}}
-                  transition={{ duration: 2, repeat: Infinity }}
+                  {...(rank === 1 ? crownAnimation : {})}
                 >
                   {rank <= 3 ? rankEmojis[rank - 1] : (
                     <span className="text-xl font-bold text-muted-foreground">{rank}</span>
@@ -118,10 +144,7 @@ export function Leaderboard({ players, currentPlayerId, compact = false }: Leade
                     )}
                   </div>
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <motion.span
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 2, repeat: Infinity, delay: index * 0.2 }}
-                    >
+                    <motion.span {...pulseAnimation(index)}>
                       🦠
                     </motion.span>
                     <span>amoeba colony</span>
@@ -132,9 +155,7 @@ export function Leaderboard({ players, currentPlayerId, compact = false }: Leade
                 <motion.div
                   className="text-2xl font-bold font-mono text-forest"
                   key={player.population}
-                  initial={{ scale: 1.2 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200 }}
+                  {...popAnimation}
                 >
                   {player.population.toLocaleString()}
                 </motion.div>
